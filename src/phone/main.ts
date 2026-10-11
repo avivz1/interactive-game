@@ -129,7 +129,17 @@ function showFailure(message: string): void {
   );
 }
 
+function onCellular(): boolean {
+  const conn = (navigator as Navigator & { connection?: { type?: string } }).connection;
+  return !!conn && conn.type === 'cellular';
+}
+
 async function start(session: JoinResponse): Promise<void> {
+  if (onCellular()) {
+    void closeRemote(session);
+    showFailure('This phone is using mobile data. Connect it to your home Wi-Fi (the same one as the TV) and try again.');
+    return;
+  }
   screen(h('h1', { text: 'Starting the camera…' }));
   let stream: MediaStream;
   try {
@@ -171,12 +181,14 @@ async function start(session: JoinResponse): Promise<void> {
   // Safety: send camera frames only to a TV on the local network.
   let lan: boolean | null = null;
   let route = 'route unknown';
-  for (let i = 0; i < 10 && lan === null; i++) {
+  for (let i = 0; i < 10; i++) {
     const res = await checkLan(sender.pc);
     if (res.pair) {
       lan = res.lan;
       route = describePair(res.pair);
-    } else await sleep(300);
+      if (lan) break;
+    }
+    await sleep(300);
   }
   if (live !== state) return;
   if (lan !== true) {
@@ -188,10 +200,12 @@ async function start(session: JoinResponse): Promise<void> {
   try {
     await sender.setTrack(stream.getVideoTracks()[0]);
   } catch (err) {
+    if (live !== state) return;
     stopLive(true);
     showFailure(errorText(err));
     return;
   }
+  if (live !== state) return;
   void wakeLock.acquire();
 
   sender.onCtlMessage = (data) => {
@@ -213,8 +227,13 @@ async function start(session: JoinResponse): Promise<void> {
   });
 
   showLive(state);
-  await sender.waitForChannels(5000);
+  const channelsOpen = await sender.waitForChannels(8000);
   if (live !== state) return;
+  if (!channelsOpen) {
+    stopLive(false);
+    showFailure('Could not reach the TV. Make sure the phone and the TV are on the same Wi-Fi network.');
+    return;
+  }
   sendHello(state);
   await startTracking(state);
 }
@@ -267,21 +286,52 @@ async function startTracking(state: Live): Promise<void> {
   );
 }
 
+const stopStream = (s: MediaStream) => s.getTracks().forEach((t) => t.stop());
+
+/** Replaces the camera; returns false (and releases `next`) if the session ended meanwhile. */
+async function useStream(state: Live, next: MediaStream, facing: Facing): Promise<boolean> {
+  if (live !== state) {
+    stopStream(next);
+    return false;
+  }
+  try {
+    await state.sender.setTrack(next.getVideoTracks()[0]);
+  } catch (err) {
+    stopStream(next);
+    throw err;
+  }
+  if (live !== state) {
+    stopStream(next);
+    return false;
+  }
+  state.stream = next;
+  state.facing = facing;
+  state.video.srcObject = next;
+  void state.video.play().catch(() => undefined);
+  return true;
+}
+
 function showLive(state: Live): void {
+  let switching = false;
   const flip = async () => {
-    const facing: Facing = state.facing === 'environment' ? 'user' : 'environment';
+    if (switching || live !== state) return;
+    switching = true;
+    const status = document.getElementById('track-status');
+    const previous = state.facing;
+    const facing: Facing = previous === 'environment' ? 'user' : 'environment';
+    // Many Android phones cannot open two cameras at once: release the current one first.
+    stopStream(state.stream);
     try {
-      const next = await openCamera(facing);
-      await state.sender.setTrack(next.getVideoTracks()[0]);
-      state.stream.getTracks().forEach((t) => t.stop());
-      state.stream = next;
-      state.facing = facing;
-      state.video.srcObject = next;
-      void state.video.play().catch(() => undefined);
-      sendHello(state);
+      if (await useStream(state, await openCamera(facing), facing)) sendHello(state);
     } catch (err) {
-      const status = document.getElementById('track-status');
       if (status) status.textContent = cameraErrorMessage(err);
+      try {
+        await useStream(state, await openCamera(previous), previous);
+      } catch {
+        // camera unavailable; the TV shows no video until the next restart
+      }
+    } finally {
+      switching = false;
     }
   };
   screen(
@@ -316,7 +366,7 @@ function stopLive(notifyTv: boolean): void {
   if (notifyTv) state.sender.sendCtl({ t: 'bye' });
   state.timers.forEach((t) => clearInterval(t));
   if (state.pose) state.pose.stop();
-  state.stream.getTracks().forEach((t) => t.stop());
+  stopStream(state.stream);
   state.video.srcObject = null;
   // Give the 'bye' message a moment to leave before closing.
   setTimeout(() => state.sender.close(), notifyTv ? 300 : 0);
@@ -331,16 +381,7 @@ document.addEventListener('visibilitychange', () => {
   const track = state.stream.getVideoTracks()[0];
   if (track && track.readyState === 'live') return;
   void openCamera(state.facing)
-    .then(async (next) => {
-      if (live !== state) {
-        next.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      await state.sender.setTrack(next.getVideoTracks()[0]);
-      state.stream = next;
-      state.video.srcObject = next;
-      void state.video.play().catch(() => undefined);
-    })
+    .then((next) => useStream(state, next, state.facing))
     .catch(() => undefined);
 });
 

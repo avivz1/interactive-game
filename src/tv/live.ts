@@ -33,6 +33,7 @@ declare global {
 const VISIBLE = 0.5;
 /** Phone capture + encode + TV render time not covered by WebRTC stats (rough, tuned on devices later). */
 const UNMEASURED_DELAY_MS = 60;
+const DEFAULT_DELAY_MS = 150;
 const OFFSET_KEY = 'tv.syncOffsetMs';
 
 interface StatsSnapshot {
@@ -77,7 +78,7 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
   const clock = new ClockSync();
   let disposed = false;
   let userOffset = readOffset();
-  let estimateMs = 150;
+  let estimateMs = DEFAULT_DELAY_MS;
   let videoFps = 0;
   let codec = '?';
   let phoneFps = 0;
@@ -90,6 +91,7 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
   let lastHzAt = performance.now();
   let rvfcFrames = 0;
   let rvfcDelayMs: number | null = null;
+  let lastPongAt = 0;
   let works = false;
   let goodSeconds = 0;
   let noVideoSeconds = 0;
@@ -123,13 +125,25 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
   rx.ctl.onmessage = (e: MessageEvent) => {
     const msg = parseCtl(e.data);
     if (!msg) return;
-    if (msg.t === 'pong') clock.add(msg.tv, msg.ph, performance.now());
+    if (msg.t === 'pong') {
+      lastPongAt = performance.now();
+      clock.add(msg.tv, msg.ph, lastPongAt);
+    }
     else if (msg.t === 'stats') {
       phoneFps = msg.fps;
       phoneInferMs = msg.inferMs;
     } else if (msg.t === 'hello') phoneSource = msg.source;
-    else if (msg.t === 'bye') end('stopped');
+    else if (msg.t === 'bye') {
+      rx.byeSeen = true;
+      end('stopped');
+    }
   };
+
+  const onChannelClose = () => end(rx.byeSeen ? 'stopped' : 'lost');
+  rx.ctl.onclose = onChannelClose;
+  rx.pose.onclose = onChannelClose;
+  // The phone may have left before this view started; end asynchronously.
+  if (rx.byeSeen || rx.ctl.readyState === 'closing' || rx.ctl.readyState === 'closed') setTimeout(onChannelClose, 0);
 
   let pingId = 0;
   const ping = () => rx.sendCtl({ t: 'ping', id: ++pingId, tv: performance.now() });
@@ -207,7 +221,8 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
         const jc = snap.jitterCount - prevStats.jitterCount;
         const jitterMs = jc > 0 ? ((snap.jitterDelay - prevStats.jitterDelay) / jc) * 1000 : 0;
         const decodeMs = frames > 0 ? ((snap.decodeTime - prevStats.decodeTime) / frames) * 1000 : 0;
-        estimateMs = jitterMs + decodeMs + (rttMs !== null ? rttMs / 2 : 5) + UNMEASURED_DELAY_MS;
+        // Old engines lack these counters; keep the default estimate there.
+        if (jc > 0) estimateMs = jitterMs + decodeMs + (rttMs !== null ? rttMs / 2 : 5) + UNMEASURED_DELAY_MS;
       }
       prevStats = snap;
       const c = typeof s.codecId === 'string' ? byId[s.codecId] : undefined;
@@ -227,24 +242,32 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     poseWithBody = 0;
     lastHzAt = now;
 
-    // The TV passes when video plays and the data channel delivers; body tracking
-    // speed depends on the phone and the scene, so it is reported separately.
+    // The TV passes when video plays and the data channel answers pings; body
+    // tracking depends on the phone and the scene, so it is reported separately.
     const hasVideo = video.videoWidth > 0 && videoFps > 5;
-    if (hasVideo && packetHz > 0) goodSeconds++;
+    const dataOk = now - lastPongAt < 5000;
+    if (hasVideo && dataOk) goodSeconds++;
     else goodSeconds = 0;
     if (goodSeconds >= 2) works = true;
     noVideoSeconds = hasVideo ? 0 : noVideoSeconds + 1;
 
+    let body: string;
+    if (poseHz >= 10) body = 'Body ' + Math.round(poseHz) + '/s';
+    else if (packetHz >= 10) body = 'Step back so the camera sees your whole body';
+    else if (packetHz > 0) body = 'Body tracking is slow on the phone (' + packetHz.toFixed(0) + '/s)';
+    else body = 'Waiting for body tracking from the phone…';
     if (works) {
-      let body: string;
-      if (poseHz >= 10) body = 'Body ' + Math.round(poseHz) + '/s';
-      else if (packetHz >= 10) body = 'Step back so the camera sees your whole body';
-      else body = 'Body tracking is slow on the phone (' + packetHz.toFixed(0) + '/s)';
       chip.textContent = '✅ This TV works!  Video ' + Math.round(videoFps) + ' fps · ' + body;
       chip.className = 'chip ok';
+    } else if (hasVideo) {
+      chip.textContent = 'Video OK · ' + body;
+      chip.className = 'chip';
     } else if (noVideoSeconds >= 10) {
       chip.textContent = '⚠️ Connected, but no video is showing. This TV may not support it.';
       chip.className = 'chip warn';
+    } else {
+      chip.textContent = 'Connected — waiting for video…';
+      chip.className = 'chip';
     }
 
     hud.textContent = [
@@ -320,6 +343,8 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     rx.onStream = null;
     rx.pose.onmessage = null;
     rx.ctl.onmessage = null;
+    rx.pose.onclose = null;
+    rx.ctl.onclose = null;
     video.srcObject = null;
   }
 

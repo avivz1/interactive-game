@@ -26,9 +26,9 @@ export default defineConfig({
           args: [
             '--use-fake-ui-for-media-stream',
             '--use-fake-device-for-media-stream',
-            // CI containers use non-private addresses; expose real IPs so the
-            // same-device rule of the LAN safety check applies to both pages.
-            '--disable-features=WebRtcHideLocalIpsWithMdns',
+            // CI containers may have only non-private addresses, which the LAN-only
+            // filter drops; loopback candidates give both pages a private route.
+            '--allow-loopback-in-peer-connection',
           ],
         },
       },

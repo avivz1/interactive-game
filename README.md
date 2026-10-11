@@ -17,7 +17,8 @@ drawn on top, and tells you whether this TV can run the games.
   pairing offer/answer through Upstash Redis; video never goes through the cloud.
 
 Safety: the camera is sent only after the adult confirms the two pictures match
-on both screens, and only to a TV on the same local network.
+on both screens, and only to a TV on the same local network (no STUN/TURN; both
+sides accept only local-network addresses and verify the route before media flows).
 
 ## Deploy (Vercel)
 
@@ -31,8 +32,8 @@ on both screens, and only to a TV on the same local network.
 Preview deployments are behind Vercel login by default, which a TV browser
 cannot pass. Test on the production URL (or turn off Deployment Protection).
 
-Optional: `IP_HASH_SECRET` (any long random string) keeps rate-limit keys stable
-across function instances.
+Optional: `IP_HASH_SECRET` (any long random string) for the rate-limit key salt;
+by default it is derived from the Upstash token.
 
 ## Test on the TV
 

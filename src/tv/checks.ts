@@ -1,5 +1,7 @@
 // Capability checks shown on the TV so we can tell whether this TV browser can play.
 
+import { RTC_CONFIG } from '../shared/rtc';
+
 export interface Check {
   label: string;
   ok: boolean;
@@ -50,6 +52,20 @@ export function hasWebRtc(): boolean {
   return typeof RTCPeerConnection === 'function';
 }
 
+/** Creates a throwaway connection to see whether a receive-only video transceiver works. */
+function canReceiveVideo(): boolean {
+  let pc: RTCPeerConnection | null = null;
+  try {
+    pc = new RTCPeerConnection(RTC_CONFIG);
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    return true;
+  } catch (_e) {
+    return false;
+  } finally {
+    if (pc) pc.close();
+  }
+}
+
 export function runChecks(): Check[] {
   const rtc = hasWebRtc();
   const proto = rtc ? (RTCPeerConnection.prototype as unknown as Record<string, unknown>) : {};
@@ -64,7 +80,8 @@ export function runChecks(): Check[] {
   return [
     { label: 'WebRTC', ok: rtc },
     { label: 'Data channel', ok: rtc && 'createDataChannel' in proto },
-    { label: 'Video receive', ok: rtc && 'addTransceiver' in proto },
+    // Without transceivers the receiver falls back to a legacy offer; the live test decides.
+    { label: 'Video receive', ok: rtc, detail: rtc && !canReceiveVideo() ? 'legacy mode' : undefined },
     {
       label: 'Video codecs',
       ok: codecs.indexOf('H264') >= 0 || codecs.indexOf('VP8') >= 0,

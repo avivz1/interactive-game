@@ -23,6 +23,8 @@ const root = document.getElementById('app') as HTMLElement;
 const browser = browserInfo();
 const checks = runChecks();
 
+const PHONE_SETUP_GRACE_MS = 3 * 60 * 1000;
+
 let generation = 0;
 let receiver: Receiver | null = null;
 let disposeLive: (() => void) | null = null;
@@ -174,10 +176,11 @@ async function startPairing(): Promise<void> {
   }
   if (!pairing || gen !== generation) return;
 
-  const qrUrl = location.origin + '/phone/#k=' + pairing.key;
-  const status = renderPairing(pairing, qrUrl);
-  const deadline = Date.now() + pairing.expiresInMs;
-  let pollMs = pairing.pollMs;
+  const session = pairing;
+  const qrUrl = location.origin + '/phone/#k=' + session.key;
+  const status = renderPairing(session, qrUrl);
+  let deadline = Date.now() + session.expiresInMs;
+  let pollMs = session.pollMs;
   let answer: string | null = null;
   let phoneJoined = false;
 
@@ -186,12 +189,16 @@ async function startPairing(): Promise<void> {
     if (gen !== generation) return;
     if (Date.now() > deadline) break;
     try {
-      const res = await apiFetch<TvPollResponse>('/api/session/' + pairing.sid, { token: pairing.tvToken });
+      const res = await apiFetch<TvPollResponse>('/api/session/' + session.sid, { token: session.tvToken });
       if (gen !== generation) return;
       pollMs = Math.max(500, res.pollMs || 1000);
-      if (res.state === 'joined') {
+      if (res.state === 'joined' && !phoneJoined) {
         phoneJoined = true;
-        status.textContent = 'Phone found! Starting its camera…';
+        // Give the adult time to confirm and allow the camera; OK abandons a stuck phone.
+        deadline = Math.max(deadline, Date.now() + PHONE_SETUP_GRACE_MS);
+        root.querySelector('.pair-row')!.className = 'pair-row hidden';
+        status.textContent = 'Phone found! Starting its camera…  (press OK for a new code)';
+        onOk = () => void startPairing();
       }
       if (res.state === 'answered' && res.answer) answer = res.answer;
     } catch (err) {
@@ -202,6 +209,10 @@ async function startPairing(): Promise<void> {
     }
   }
   if (answer === null) {
+    // Tell the server we gave up so a late phone gets a clear "expired" error.
+    void apiFetch('/api/session/' + session.sid, { method: 'DELETE', token: session.tvToken, timeoutMs: 4000 }).catch(
+      () => undefined,
+    );
     cleanup();
     if (phoneJoined) {
       showMessage('The phone did not connect', 'Check the message on the phone, then press OK for a new code.', {
@@ -214,10 +225,12 @@ async function startPairing(): Promise<void> {
     return;
   }
 
+  onOk = null;
   status.textContent = 'Connecting…';
   try {
     await rx.acceptAnswer(answer);
   } catch (err) {
+    cleanup();
     showMessage('Could not connect', (err as Error).message, { action: 'Try again', onAction: startPairing });
     return;
   }
@@ -233,14 +246,18 @@ async function startPairing(): Promise<void> {
     return;
   }
 
+  // Defense in depth: acceptAnswer already refused non-local addresses. When the
+  // browser hides both addresses the result is unknown and the TV continues.
   let lan: boolean | null = null;
   let route = '';
-  for (let i = 0; i < 5 && lan === null; i++) {
+  for (let i = 0; i < 8; i++) {
     const res = await checkLan(rx.pc);
     if (res.pair) {
-      lan = res.lan;
       route = ' (TV ' + (res.pair.local.address || 'hidden') + ' ← phone ' + (res.pair.remote.address || 'hidden') + ')';
-    } else await sleep(300);
+      lan = !res.pair.local.address && !res.pair.remote.address ? null : res.lan;
+      if (lan !== false) break;
+    }
+    await sleep(300);
   }
   if (gen !== generation) return;
   if (lan === false) {

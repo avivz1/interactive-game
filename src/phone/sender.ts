@@ -1,6 +1,7 @@
 // Phone side of the WebRTC link: answers the TV's offer and sends the camera.
 
 import { RTC_CONFIG, preferH264, waitForIceGathering } from '../shared/rtc';
+import { checkRemoteSdp, stripGlobalIPv6 } from '../shared/sdp';
 
 const MAX_BITRATE = 2_500_000;
 const MAX_LONG_SIDE = 960;
@@ -27,8 +28,11 @@ export class Sender {
     });
   }
 
+  /** Answers the TV's offer; refuses offers from devices outside the local network. */
   async answer(offer: string): Promise<string> {
-    await this.pc.setRemoteDescription({ type: 'offer', sdp: offer });
+    const checked = checkRemoteSdp(offer);
+    if (!checked.ok) throw new Error('For safety, the camera only works with a TV on your home Wi-Fi (' + checked.reason + ').');
+    await this.pc.setRemoteDescription({ type: 'offer', sdp: checked.sdp });
     const tr = this.pc.getTransceivers().find((t) => t.receiver.track && t.receiver.track.kind === 'video');
     if (!tr) throw new Error('The TV did not ask for video.');
     tr.direction = 'sendonly';
@@ -38,7 +42,7 @@ export class Sender {
     await waitForIceGathering(this.pc, 2500);
     const sdp = this.pc.localDescription ? this.pc.localDescription.sdp : '';
     if (!sdp) throw new Error('Could not create an answer.');
-    return sdp;
+    return stripGlobalIPv6(sdp);
   }
 
   /** Starts (or switches) the video sent to the TV. Call only after the LAN check. */

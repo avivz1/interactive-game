@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { JoinResponse, PairResponse, TvPollResponse } from '../../src/shared/api';
-import { CODE_TTL_SEC, LIMITS } from '../../server/pairing';
+import { ANSWER_KEEP_SEC, CODE_TTL_SEC, LIMITS } from '../../server/pairing';
 import { handle, type Deps } from '../../server/router';
 import { MemoryStore } from '../../server/store';
 
@@ -60,7 +60,10 @@ describe('pairing flow', () => {
     poll = (await call(`/api/session/${tv.sid}`, { token: tv.tvToken })).json as TvPollResponse;
     expect(poll).toMatchObject({ state: 'answered', answer: ANSWER });
 
-    // The record is deleted once the TV has the answer.
+    // A retried poll still gets the answer; the record expires shortly after.
+    poll = (await call(`/api/session/${tv.sid}`, { token: tv.tvToken })).json as TvPollResponse;
+    expect(poll).toMatchObject({ state: 'answered', answer: ANSWER });
+    clock += (ANSWER_KEEP_SEC + 1) * 1000;
     expect((await call(`/api/session/${tv.sid}`, { token: tv.tvToken })).status).toBe(404);
   });
 
@@ -121,6 +124,14 @@ describe('authorization and validation', () => {
     expect((await call('/api/join', { method: 'POST', body: {} })).status).toBe(400);
   });
 
+  it('rejects non-JSON POSTs (no cross-site simple requests)', async () => {
+    const res = await handle(
+      new Request('http://test/api/join', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"code":"123456"}' }),
+      deps,
+    );
+    expect(res.status).toBe(415);
+  });
+
   it('returns 404/405 for unknown routes and wrong methods', async () => {
     expect((await call('/api/nope')).status).toBe(404);
     expect((await call('/api/pair')).status).toBe(405);
@@ -148,6 +159,14 @@ describe('abuse limits', () => {
     expect(last).toBe(429);
     // other clients are unaffected
     expect((await call('/api/join', { method: 'POST', body: { code: '000000' }, ip: '2.2.2.2' })).status).toBe(404);
+  });
+
+  it('does not count stale QR scans toward the global breaker', async () => {
+    for (let i = 0; i < LIMITS.joinFailuresGlobal.max; i++) {
+      await call('/api/join', { method: 'POST', body: { key: 'A'.repeat(22) }, ip: `6.6.${Math.floor(i / 200)}.${i % 200}` });
+    }
+    const tv = await pair('9.9.9.8');
+    expect((await call('/api/join', { method: 'POST', body: { code: tv.code }, ip: '7.7.7.8' })).status).toBe(200);
   });
 
   it('pauses typed codes globally after many failures, but QR keys keep working', async () => {

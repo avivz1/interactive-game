@@ -67,7 +67,17 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   try {
     if (path === '/health') {
       allow(req, 'GET');
-      return json(200, { ok: deps.store !== null, store: deps.store?.kind ?? 'not_configured' });
+      if (!deps.store) return json(200, { ok: false, store: 'not_configured' });
+      try {
+        await deps.store.set('health:probe', '1', 10); // a real write catches bad tokens and quota limits
+      } catch {
+        return json(503, { ok: false, store: deps.store.kind, error: 'storage_unavailable' });
+      }
+      return json(200, { ok: true, store: deps.store.kind });
+    }
+    if (req.method === 'POST' && !/^application\/json\b/i.test(req.headers.get('content-type') ?? '')) {
+      // Forces a CORS preflight for cross-site requests, which this API never answers.
+      throw new ApiError(415, 'unsupported_media_type', 'Expected JSON.');
     }
     if (!deps.store) {
       throw new ApiError(503, 'storage_not_configured', 'Pairing storage is not set up (connect Upstash Redis in Vercel).');
@@ -98,7 +108,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     throw new ApiError(404, 'not_found', 'Unknown endpoint.');
   } catch (err) {
     if (err instanceof ApiError) return errorResponse(err);
-    console.error('api: unhandled error', err instanceof Error ? err.message : String(err));
+    // Store errors can echo command arguments (SDPs with addresses); log only a short prefix.
+    const name = err instanceof Error ? err.name : typeof err;
+    const msg = err instanceof Error ? err.message.split(', command was')[0].slice(0, 160) : '';
+    console.error('api: unhandled error', name, msg);
     return json(500, { error: 'internal', message: 'Something went wrong. Please try again.' });
   }
 }

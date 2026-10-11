@@ -3,8 +3,12 @@
 
 import { isLanPair, type CandidateInfo } from './lan';
 
-/** No STUN/TURN: connections are only possible inside the local network. */
-export const RTC_CONFIG: RTCConfiguration = { iceServers: [] };
+/**
+ * No STUN/TURN: connections are only possible inside the local network.
+ * sdpSemantics: Chromium 69-71 (2020 Samsung TVs) default to Plan B, where
+ * addTransceiver throws; newer browsers accept or ignore the key.
+ */
+export const RTC_CONFIG = { iceServers: [], sdpSemantics: 'unified-plan' } as RTCConfiguration;
 
 /** Resolves when ICE gathering completes or after timeoutMs (non-trickle signaling). */
 export function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<void> {

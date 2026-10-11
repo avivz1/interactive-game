@@ -16,6 +16,8 @@ import type { Store } from './store.js';
 export const CODE_TTL_SEC = 10 * 60;
 export const SESSION_TTL_SEC = 15 * 60;
 export const MAX_SDP_CHARS = 24_000;
+/** How long an answered session stays readable by the TV. */
+export const ANSWER_KEEP_SEC = 60;
 
 export const LIMITS = {
   pairPerIp: { max: 30, windowSec: 600 },
@@ -137,9 +139,10 @@ export async function join(ctx: Ctx, body: Record<string, unknown>): Promise<Joi
   await rateLimit(ctx, 'join', ctx.client, LIMITS.joinPerIp.max, LIMITS.joinPerIp.windowSec);
 
   let sid: string | null;
-  if (typeof body.key === 'string') {
-    if (!/^[A-Za-z0-9_-]{22}$/.test(body.key)) throw new ApiError(400, 'bad_request', 'Invalid link.');
-    sid = await ctx.store.getdel(keys.key(sha256(body.key)));
+  const viaCode = typeof body.key !== 'string';
+  if (!viaCode) {
+    if (!/^[A-Za-z0-9_-]{22}$/.test(body.key as string)) throw new ApiError(400, 'bad_request', 'Invalid link.');
+    sid = await ctx.store.get(keys.key(sha256(body.key as string)));
   } else if (typeof body.code === 'string') {
     const code = body.code.replace(/\D/g, '');
     if (!/^\d{6}$/.test(code)) throw new ApiError(400, 'bad_request', 'Enter the 6-digit code shown on the TV.');
@@ -147,27 +150,37 @@ export async function join(ctx: Ctx, body: Record<string, unknown>): Promise<Joi
     if (failures >= LIMITS.joinFailuresGlobal.max) {
       throw new ApiError(503, 'busy', 'Typed codes are paused for a few minutes. Scan the QR code instead.');
     }
-    sid = await ctx.store.getdel(keys.code(code));
+    sid = await ctx.store.get(keys.code(code));
   } else {
     throw new ApiError(400, 'bad_request', 'Enter the 6-digit code shown on the TV.');
   }
 
   if (!sid) {
-    await ctx.store.incr(failureWindowKey(ctx), LIMITS.joinFailuresGlobal.windowSec);
+    // Only typed codes are guessable; stale QR scans don't count toward the breaker.
+    if (viaCode) await ctx.store.incr(failureWindowKey(ctx), LIMITS.joinFailuresGlobal.windowSec);
     throw notFound();
   }
-  // The code and the QR key both lead here; only the first claim wins.
-  if (!(await ctx.store.set(keys.claim(sid), '1', SESSION_TTL_SEC, { nx: true }))) throw notFound();
+  // The code and the QR key both lead here; only the first claim wins. The nonce
+  // makes the claim safe if the store client retries the SET after a timeout.
+  const nonce = randomToken(8);
+  let claimed = await ctx.store.set(keys.claim(sid), nonce, SESSION_TTL_SEC, { nx: true });
+  if (!claimed) claimed = (await ctx.store.get(keys.claim(sid))) === nonce;
+  if (!claimed) throw notFound();
 
-  const rec = await loadSession(ctx, sid);
-  if (!rec || rec.state !== 'waiting') throw notFound();
-  await ctx.store.del([keys.code(rec.code), keys.key(rec.keyHash)]);
-
-  const phoneToken = randomToken();
-  rec.state = 'joined';
-  rec.phoneTokenHash = sha256(phoneToken);
-  await saveSession(ctx, sid, rec);
-  return { sid, phoneToken, offer: rec.offer, emoji: rec.emoji };
+  try {
+    const rec = await loadSession(ctx, sid);
+    if (!rec || rec.state !== 'waiting') throw notFound();
+    await ctx.store.del([keys.code(rec.code), keys.key(rec.keyHash)]);
+    const phoneToken = randomToken();
+    rec.state = 'joined';
+    rec.phoneTokenHash = sha256(phoneToken);
+    await saveSession(ctx, sid, rec);
+    return { sid, phoneToken, offer: rec.offer, emoji: rec.emoji };
+  } catch (err) {
+    // A transient store failure must not leave the session claimed by nobody.
+    if (!(err instanceof ApiError)) await ctx.store.del([keys.claim(sid)]).catch(() => undefined);
+    throw err;
+  }
 }
 
 export async function submitAnswer(ctx: Ctx, sid: string, token: string | null, body: Record<string, unknown>): Promise<void> {
@@ -186,8 +199,11 @@ export async function pollForTv(ctx: Ctx, sid: string, token: string | null): Pr
   requireToken(token, rec.tvTokenHash);
   await rateLimit(ctx, 'poll', sid, LIMITS.pollPerSession.max, LIMITS.pollPerSession.windowSec);
   if (rec.state === 'answered' && rec.answer) {
-    // Signaling is finished; nothing about this session needs to be kept.
-    await ctx.store.del([keys.session(sid), keys.claim(sid)]);
+    // Signaling is finished. Keep the record briefly so a retried poll (lost
+    // response) still gets the answer, then let it expire.
+    if (ctx.now() - rec.createdAt < (SESSION_TTL_SEC - ANSWER_KEEP_SEC) * 1000) {
+      await ctx.store.set(keys.session(sid), JSON.stringify(rec), ANSWER_KEEP_SEC);
+    }
     return { state: 'answered', answer: rec.answer, pollMs: 0 };
   }
   const age = ctx.now() - rec.createdAt;

@@ -27,8 +27,10 @@ async function expectStreaming(tv: Page): Promise<void> {
   await expect(tv.getByTestId('live')).toBeVisible({ timeout: 30_000 });
   await expect
     .poll(() => tv.evaluate(() => (window as unknown as { __tvDebug?: TvDebug }).__tvDebug ?? null), { timeout: 20_000 })
-    .toMatchObject({ lan: true, works: true });
+    .toMatchObject({ works: true });
   const dbg = await tv.evaluate(() => (window as unknown as { __tvDebug: TvDebug }).__tvDebug);
+  // The phone enforces the LAN check; the TV may see only hidden (mDNS) addresses.
+  expect(dbg.lan).not.toBe(false);
   expect(dbg.videoWidth).toBeGreaterThan(0);
   expect(dbg.videoFps).toBeGreaterThan(5);
   expect(dbg.poseHz).toBeGreaterThan(10);
@@ -71,4 +73,26 @@ test('wrong code shows a friendly error', async ({ browser }) => {
   await phone.getByTestId('code-input').fill('000000');
   await phone.getByTestId('join').click();
   await expect(phone.getByTestId('error')).toContainText('Code not found');
+});
+
+test('phone refuses a "TV" that points outside the local network', async ({ browser, request }) => {
+  const offer = [
+    'v=0',
+    'o=- 1 2 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'm=video 9 UDP/TLS/RTP/SAVPF 96',
+    'a=candidate:1 1 udp 2122260223 81.2.3.4 50000 typ prflx generation 0',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    '',
+  ].join('\r\n');
+  const res = await request.post('/api/pair', { data: { offer } });
+  expect(res.status()).toBe(201);
+  const { code } = (await res.json()) as { code: string };
+
+  const phone = await openPhone(browser, '/phone/?pose=synthetic');
+  await phone.getByTestId('code-input').fill(code);
+  await phone.getByTestId('join').click();
+  await phone.getByTestId('confirm-yes').click();
+  await expect(phone.getByTestId('error')).toContainText('For safety');
 });

@@ -7,7 +7,6 @@ export interface Store {
   get(key: string): Promise<string | null>;
   /** Returns false when `nx` is set and the key already exists. */
   set(key: string, value: string, ttlSec: number, opts?: { nx?: boolean }): Promise<boolean>;
-  getdel(key: string): Promise<string | null>;
   del(keys: string[]): Promise<void>;
   /** Increments a counter, giving it ttlSec when it is created. */
   incr(key: string, ttlSec: number): Promise<number>;
@@ -49,12 +48,6 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async getdel(key: string): Promise<string | null> {
-    const v = this.read(key);
-    this.data.delete(key);
-    return v;
-  }
-
   async del(keys: string[]): Promise<void> {
     for (const k of keys) this.data.delete(k);
   }
@@ -85,10 +78,6 @@ export class UpstashStore implements Store {
       ? await this.redis.set(key, value, { ex: ttlSec, nx: true })
       : await this.redis.set(key, value, { ex: ttlSec });
     return res === 'OK';
-  }
-
-  async getdel(key: string): Promise<string | null> {
-    return this.redis.getdel<string>(key);
   }
 
   async del(keys: string[]): Promise<void> {

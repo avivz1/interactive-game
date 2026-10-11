@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { Deps } from './router.js';
 import { MemoryStore, UpstashStore, type Store } from './store.js';
 
@@ -14,12 +14,20 @@ function createStore(env: NodeJS.ProcessEnv): Store | null {
   return new MemoryStore();
 }
 
+/** Must be identical on every function instance, or per-IP limits split across instances. */
+function ipSalt(env: NodeJS.ProcessEnv): string {
+  if (env.IP_HASH_SECRET) return env.IP_HASH_SECRET;
+  const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  if (token) return createHmac('sha256', token).update('ip-rate-limit-salt').digest('hex');
+  return randomBytes(32).toString('hex'); // memory store: single process
+}
+
 export function getDeps(): Deps {
   if (!cached) {
     cached = {
       store: createStore(process.env),
       now: Date.now,
-      ipSalt: process.env.IP_HASH_SECRET || randomBytes(32).toString('hex'),
+      ipSalt: ipSalt(process.env),
     };
   }
   return cached;
