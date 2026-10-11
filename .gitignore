@@ -1,0 +1,9 @@
+node_modules/
+dist/
+public/mediapipe/
+test-results/
+playwright-report/
+.vercel/
+*.log
+.env*
+!.env.example

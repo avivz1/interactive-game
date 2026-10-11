@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Play on TV</title>
+    <link rel="stylesheet" href="/src/tv/style.css" />
+  </head>
+  <body>
+    <div id="app"><div class="screen center"><div class="message"><h1 id="boot">Starting…</h1></div></div></div>
+    <div id="errors" hidden></div>
+    <script>
+      // ES5 only: runs on any TV engine, shows errors on screen (TVs have no console)
+      // and explains the problem if the app itself cannot start.
+      (function () {
+        var box = document.getElementById('errors');
+        function show(msg) {
+          box.hidden = false;
+          var line = document.createElement('div');
+          line.textContent = String(msg).slice(0, 300);
+          box.appendChild(line);
+        }
+        window.__tvShowError = show;
+        window.addEventListener('error', function (e) {
+          var where = e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '';
+          show('Error: ' + (e.message || 'script failed') + where);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          show('Error: ' + (r && r.message ? r.message : String(r)));
+        });
+        setTimeout(function () {
+          if (window.__tvStarted) return;
+          var app = document.getElementById('app');
+          app.innerHTML =
+            '<div class="screen center"><div class="message"><h1>This TV browser could not start the app</h1>' +
+            '<p>It may be too old. Please send us this line:</p><p class="ua"></p></div></div>';
+          app.querySelector('.ua').textContent = navigator.userAgent;
+        }, 12000);
+      })();
+    </script>
+    <script type="module" src="/src/tv/main.ts"></script>
+  </body>
+</html>

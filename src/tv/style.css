@@ -1,0 +1,196 @@
+/* TV styles: large text for viewing from the couch, 5% safe margins for overscan.
+   Avoids CSS newer than Chromium 69 (no flex gap, inset, clamp, aspect-ratio). */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1020;
+  color: #f4f6ff;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Samsung One', sans-serif;
+}
+#app {
+  height: 100%;
+}
+.hidden {
+  display: none !important;
+}
+.screen {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 5vh 5vw;
+}
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.message {
+  max-width: 80vw;
+}
+h1 {
+  font-size: 5vh;
+  margin: 0 0 2vh;
+}
+p {
+  font-size: 3vh;
+  margin: 1vh 0;
+  line-height: 1.4;
+}
+.small {
+  font-size: 2.6vh;
+  opacity: 0.85;
+}
+.btn {
+  margin-top: 3vh;
+  font-size: 3.2vh;
+  padding: 1.6vh 4vh;
+  border-radius: 1.5vh;
+  border: 0.5vh solid #ffd600;
+  background: #1d2a55;
+  color: #fff;
+}
+.btn:focus {
+  background: #ffd600;
+  color: #0b1020;
+  outline: none;
+}
+.pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+}
+.title {
+  font-size: 5.5vh;
+}
+.pair-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pair-col {
+  margin: 0 4vw;
+}
+.qr {
+  width: 34vh;
+  height: 34vh;
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 1vh;
+}
+.code {
+  font-size: 13vh;
+  font-weight: 800;
+  letter-spacing: 1vh;
+  color: #ffd600;
+  margin: 1vh 0 2vh;
+}
+.emoji {
+  font-size: 8vh;
+  line-height: 1.2;
+}
+.status {
+  font-size: 3.4vh;
+  min-height: 4.5vh;
+}
+.checks {
+  font-size: 2vh;
+  opacity: 0.8;
+}
+.checks-title {
+  font-weight: 700;
+}
+.check {
+  margin: 0 0.8vw;
+}
+.check.ok {
+  color: #7dffa1;
+}
+.check.bad {
+  color: #ff8a8a;
+}
+.browser,
+.ua {
+  font-size: 1.8vh;
+  opacity: 0.7;
+  margin-top: 0.8vh;
+  word-break: break-all;
+}
+.live {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+.live-video,
+.live-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.live-video {
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+.chip {
+  position: absolute;
+  top: 4vh;
+  left: 4vw;
+  font-size: 2.8vh;
+  padding: 1vh 2vh;
+  border-radius: 1vh;
+  background: rgba(11, 16, 32, 0.75);
+}
+.chip.ok {
+  border: 0.3vh solid #7dffa1;
+}
+.chip.warn {
+  border: 0.3vh solid #ffb347;
+}
+.banner {
+  position: absolute;
+  top: 45vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 4vh;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2vh 0;
+}
+.hud {
+  position: absolute;
+  bottom: 4vh;
+  left: 4vw;
+  margin: 0;
+  font-size: 2.1vh;
+  padding: 1.5vh 2vh;
+  border-radius: 1vh;
+  background: rgba(11, 16, 32, 0.8);
+  font-family: monospace;
+}
+.hint {
+  position: absolute;
+  bottom: 4vh;
+  right: 4vw;
+  font-size: 2vh;
+  opacity: 0.6;
+}
+#errors {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 25vh;
+  overflow: hidden;
+  background: rgba(120, 0, 0, 0.85);
+  color: #fff;
+  font: 1.8vh monospace;
+  padding: 1vh 2vw;
+  z-index: 10;
+}
