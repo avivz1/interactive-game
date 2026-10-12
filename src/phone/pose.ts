@@ -9,8 +9,19 @@ import { LM, POSE_LANDMARK_COUNT } from '../shared/landmarks';
 declare const __MEDIAPIPE_VERSION__: string;
 
 const MP_BASE = '/mediapipe/' + __MEDIAPIPE_VERSION__ + '/';
-const MODEL_URL = '/mediapipe/models/pose_landmarker_lite_f16_v1.task';
+const MODEL_URLS = {
+  lite: '/mediapipe/models/pose_landmarker_lite_f16_v1.task',
+  full: '/mediapipe/models/pose_landmarker_full_f16_v1.task',
+};
 const MIN_INTERVAL_MS = 30; // ~33 Hz cap
+/** Frames measured before deciding whether to switch models. */
+const EVAL_FRAMES = 60;
+/** Upgrade lite -> full when lite runs faster than this (ms per frame). */
+const UPGRADE_MS = 22;
+/** Fall back full -> lite when full is slower than this. */
+const DOWNGRADE_MS = 45;
+
+export type PoseModel = keyof typeof MODEL_URLS;
 
 export type PoseHandler = (landmarks: Landmark[] | null, captureTime: number) => void;
 
@@ -22,6 +33,7 @@ export interface PoseSource {
   stop(): void;
   readonly fps: number;
   readonly inferMs: number;
+  readonly model: PoseModel;
 }
 
 type FrameMeta = { captureTime?: number };
@@ -45,9 +57,20 @@ class RateMeter {
   }
 }
 
+/**
+ * Starts with the small 'lite' model (fast download, works everywhere), then
+ * switches to the more accurate 'full' model if this phone is fast enough —
+ * full tracks hands and heads at 2-3 m much better.
+ */
 export class MediaPipePose implements PoseSource {
   readonly name = 'mediapipe' as const;
+  private vision: typeof Vision | null = null;
+  private fileset: Awaited<ReturnType<typeof Vision.FilesetResolver.forVisionTasks>> | null = null;
   private landmarker: Vision.PoseLandmarker | null = null;
+  private currentModel: PoseModel = 'lite';
+  private framesOnModel = 0;
+  private triedFull = false;
+  private switching = false;
   private video: VideoWithFrames | null = null;
   private onPose: PoseHandler | null = null;
   private running = false;
@@ -65,24 +88,62 @@ export class MediaPipePose implements PoseSource {
     return this.avgInfer;
   }
 
+  get model(): PoseModel {
+    return this.currentModel;
+  }
+
+  private create(model: PoseModel, delegate: 'GPU' | 'CPU'): Promise<Vision.PoseLandmarker> {
+    return this.vision!.PoseLandmarker.createFromOptions(this.fileset!, {
+      baseOptions: { modelAssetPath: MODEL_URLS[model], delegate },
+      runningMode: 'VIDEO',
+      numPoses: 1,
+    });
+  }
+
   async start(video: HTMLVideoElement, onPose: PoseHandler): Promise<void> {
-    const vision = (await import(/* @vite-ignore */ MP_BASE + 'vision_bundle.mjs')) as typeof Vision;
-    const fileset = await vision.FilesetResolver.forVisionTasks(MP_BASE + 'wasm');
-    const create = (delegate: 'GPU' | 'CPU') =>
-      vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-      });
+    this.vision = (await import(/* @vite-ignore */ MP_BASE + 'vision_bundle.mjs')) as typeof Vision;
+    this.fileset = await this.vision.FilesetResolver.forVisionTasks(MP_BASE + 'wasm');
     try {
-      this.landmarker = await create('GPU');
+      this.landmarker = await this.create('lite', 'GPU');
     } catch {
       this.delegate = 'CPU';
-      this.landmarker = await create('CPU');
+      this.landmarker = await this.create('lite', 'CPU');
     }
     this.onPose = onPose;
     this.running = true;
     this.setVideo(video);
+  }
+
+  /** Called after each frame: switch models when the measured speed says so. */
+  private maybeSwitch(): void {
+    if (this.switching || ++this.framesOnModel < EVAL_FRAMES) return;
+    if (this.currentModel === 'lite' && !this.triedFull && this.avgInfer < UPGRADE_MS) {
+      this.triedFull = true;
+      void this.swapTo('full');
+    } else if (this.currentModel === 'full' && this.avgInfer > DOWNGRADE_MS) {
+      void this.swapTo('lite');
+    }
+  }
+
+  private async swapTo(model: PoseModel): Promise<void> {
+    this.switching = true;
+    try {
+      const next = await this.create(model, this.delegate);
+      if (!this.running) {
+        next.close();
+        return;
+      }
+      const old = this.landmarker;
+      this.landmarker = next;
+      this.currentModel = model;
+      this.framesOnModel = 0;
+      this.avgInfer = 0;
+      if (old) old.close();
+    } catch {
+      // keep the current model
+    } finally {
+      this.switching = false;
+    }
   }
 
   setVideo(video: HTMLVideoElement): void {
@@ -123,6 +184,7 @@ export class MediaPipePose implements PoseSource {
     this.avgInfer = this.avgInfer === 0 ? took : this.avgInfer * 0.9 + took * 0.1;
     this.rate.tick();
     this.onPose(landmarks, captureTime);
+    this.maybeSwitch();
   }
 
   stop(): void {
@@ -163,6 +225,7 @@ export function syntheticFigure(tSec: number): Landmark[] {
 export class SyntheticPose implements PoseSource {
   readonly name = 'synthetic' as const;
   readonly inferMs = 0;
+  readonly model: PoseModel = 'lite';
   private timer: ReturnType<typeof setInterval> | null = null;
   private rate = new RateMeter();
 

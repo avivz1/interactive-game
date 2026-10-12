@@ -1,13 +1,15 @@
 // Live view on the TV: the phone's camera video (mirrored) with the tracked body
 // drawn on top, plus connection stats. This is the M1 "does this TV work?" test.
 
+import { buildBody } from '../shared/body';
 import { ClockSync } from '../shared/clock';
 import { h, mount } from '../shared/dom';
-import { BODY_CONNECTIONS, HAND_POINTS, LM, type Landmark } from '../shared/landmarks';
-import { containRect, toScreen, type Rect } from '../shared/mapping';
+import { PoseSmoother } from '../shared/filter';
+import { containRect } from '../shared/mapping';
 import { decodePose, parseCtl } from '../shared/protocol';
 import { getSelectedPair } from '../shared/rtc';
 import { PoseTimeline } from '../shared/sync';
+import { drawBody } from './draw';
 import type { Receiver } from './receiver';
 
 export type EndReason = 'stopped' | 'lost';
@@ -30,7 +32,6 @@ declare global {
   }
 }
 
-const VISIBLE = 0.5;
 /** Phone capture + encode + TV render time not covered by WebRTC stats (rough, tuned on devices later). */
 const UNMEASURED_DELAY_MS = 60;
 const DEFAULT_DELAY_MS = 150;
@@ -83,6 +84,8 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
   let codec = '?';
   let phoneFps = 0;
   let phoneInferMs = 0;
+  let phoneModel = '';
+  const smoother = new PoseSmoother();
   let phoneSource = '?';
   let rttMs: number | null = null;
   let posePackets = 0;
@@ -132,6 +135,7 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     else if (msg.t === 'stats') {
       phoneFps = msg.fps;
       phoneInferMs = msg.inferMs;
+      if (msg.model) phoneModel = msg.model;
     } else if (msg.t === 'hello') phoneSource = msg.source;
     else if (msg.t === 'bye') {
       rx.byeSeen = true;
@@ -252,7 +256,7 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     noVideoSeconds = hasVideo ? 0 : noVideoSeconds + 1;
 
     let body: string;
-    if (poseHz >= 10) body = 'Body ' + Math.round(poseHz) + '/s';
+    if (poseHz >= 10) body = 'Body ' + Math.round(poseHz) + '/s' + (phoneModel ? ' (' + phoneModel + ')' : '');
     else if (packetHz >= 10) body = 'Step back so the camera sees your whole body';
     else if (packetHz > 0) body = 'Body tracking is slow on the phone (' + packetHz.toFixed(0) + '/s)';
     else body = 'Waiting for body tracking from the phone…';
@@ -273,7 +277,7 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     hud.textContent = [
       'video     ' + video.videoWidth + 'x' + video.videoHeight + ' @ ' + videoFps.toFixed(1) + ' fps  (' + codec + ')',
       'body      ' + poseHz.toFixed(1) + '/s   packets ' + packetHz.toFixed(1) + '/s   source ' + phoneSource,
-      'phone     tracking ' + phoneFps.toFixed(1) + ' fps, ' + phoneInferMs.toFixed(1) + ' ms per frame',
+      'phone     tracking ' + phoneFps.toFixed(1) + ' fps, ' + phoneInferMs.toFixed(1) + ' ms per frame, model ' + (phoneModel || '?'),
       'network   rtt ' + (rttMs === null ? '?' : rttMs.toFixed(0) + ' ms') + '   same Wi-Fi ' + (lan === null ? '?' : lan ? 'yes' : 'NO'),
       'sync      delay ' + estimateMs.toFixed(0) + ' ms + adjust ' + userOffset + ' ms (←/→)   clock rtt ' +
         (clock.rtt === null ? '?' : clock.rtt.toFixed(0) + ' ms') +
@@ -309,8 +313,9 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
     ctx.clearRect(0, 0, w, hgt);
     if (video.videoWidth === 0) return;
     const rect = containRect(video.videoWidth, video.videoHeight, w, hgt);
-    const pose = timeline.sampleAt(performance.now() - (estimateMs + userOffset));
-    if (pose) drawBody(ctx, pose, rect);
+    const t = performance.now() - (estimateMs + userOffset);
+    const smoothed = smoother.update(timeline.sampleAt(t), t);
+    drawBody(ctx, buildBody(smoothed, rect, true));
   };
   raf = requestAnimationFrame(draw);
 
@@ -349,45 +354,4 @@ export function startLive(root: HTMLElement, rx: Receiver, lan: boolean | null, 
   }
 
   return dispose;
-}
-
-function drawBody(ctx: CanvasRenderingContext2D, pose: Landmark[], rect: Rect): void {
-  const pt = (i: number) => {
-    const lm = pose[i];
-    return lm && lm.visibility >= VISIBLE ? toScreen(lm.x, lm.y, rect, true) : null;
-  };
-  const unit = Math.max(4, rect.h * 0.012);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(120, 220, 255, 0.9)';
-  ctx.lineWidth = unit;
-  ctx.beginPath();
-  for (const [a, b] of BODY_CONNECTIONS) {
-    const p = pt(a);
-    const q = pt(b);
-    if (!p || !q) continue;
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(q.x, q.y);
-  }
-  ctx.stroke();
-
-  const nose = pt(LM.nose);
-  const le = pose[LM.leftEar];
-  const re = pose[LM.rightEar];
-  if (nose && le && re) {
-    const r = Math.max(unit * 2, Math.abs(le.x - re.x) * rect.w * 0.6);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.beginPath();
-    ctx.arc(nose.x, nose.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = 'rgba(255, 214, 0, 0.9)';
-  for (const i of HAND_POINTS) {
-    const p = pt(i);
-    if (!p) continue;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, unit * 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }

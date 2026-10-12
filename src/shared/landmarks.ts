@@ -43,5 +43,3 @@ export const BODY_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
   [LM.rightHip, LM.rightKnee],
   [LM.rightKnee, LM.rightAnkle],
 ];
-
-export const HAND_POINTS: ReadonlyArray<number> = [LM.leftWrist, LM.rightWrist];

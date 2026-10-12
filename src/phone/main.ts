@@ -277,10 +277,10 @@ async function startTracking(state: Live): Promise<void> {
   }
   state.timers.push(
     setInterval(() => {
-      state.sender.sendCtl({ t: 'stats', fps: pose.fps, inferMs: pose.inferMs });
+      state.sender.sendCtl({ t: 'stats', fps: pose.fps, inferMs: pose.inferMs, model: pose.model });
       if (status) {
         status.textContent =
-          'Tracking ' + pose.fps.toFixed(0) + ' fps' + (pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '');
+          'Tracking ' + pose.fps.toFixed(0) + ' fps' + (pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '') + ' · ' + pose.model;
       }
     }, 2000),
   );

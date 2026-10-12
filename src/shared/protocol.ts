@@ -78,7 +78,7 @@ export type CtlMessage =
   | { t: 'hello'; v: 1; width: number; height: number; facing: 'user' | 'environment'; source: 'mediapipe' | 'synthetic' }
   | { t: 'ping'; id: number; tv: number }
   | { t: 'pong'; id: number; tv: number; ph: number }
-  | { t: 'stats'; fps: number; inferMs: number }
+  | { t: 'stats'; fps: number; inferMs: number; model?: 'lite' | 'full' }
   | { t: 'bye' };
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && isFinite(v);
@@ -103,8 +103,11 @@ export function parseCtl(raw: unknown): CtlMessage | null {
       return isNum(m.id) && isNum(m.tv) ? { t: 'ping', id: m.id, tv: m.tv } : null;
     case 'pong':
       return isNum(m.id) && isNum(m.tv) && isNum(m.ph) ? { t: 'pong', id: m.id, tv: m.tv, ph: m.ph } : null;
-    case 'stats':
-      return isNum(m.fps) && isNum(m.inferMs) ? { t: 'stats', fps: m.fps, inferMs: m.inferMs } : null;
+    case 'stats': {
+      if (!isNum(m.fps) || !isNum(m.inferMs)) return null;
+      const model = m.model === 'lite' || m.model === 'full' ? m.model : undefined;
+      return model ? { t: 'stats', fps: m.fps, inferMs: m.inferMs, model } : { t: 'stats', fps: m.fps, inferMs: m.inferMs };
+    }
     case 'bye':
       return { t: 'bye' };
     default:
