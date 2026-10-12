@@ -95,6 +95,21 @@
       "en": "Bye bye! See you soon!",
       "he": "ביי ביי! נתראה בקרוב!",
       "ar": "باي باي! نراكم قريباً!"
+    },
+    "freeze_intro": {
+      "en": "Dance when the music plays. When it stops, freeze!",
+      "he": "רקדו כשיש מוזיקה. כשהיא נעצרת, קפאו!",
+      "ar": "ارقصوا مع الموسيقى. عندما تتوقف، تجمّدوا!"
+    },
+    "freeze": {
+      "en": "[excited] Freeze!",
+      "he": "[excited] קפאו!",
+      "ar": "[excited] تجمّدوا!"
+    },
+    "wiggle": {
+      "en": "[laughs] I saw you wiggle!",
+      "he": "[laughs] ראיתי אתכם זזים!",
+      "ar": "[laughs] رأيتكم تتحركون!"
     }
   }
 }

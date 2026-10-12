@@ -8,24 +8,12 @@ import { drawCritter } from '../critters';
 import { drawBody, drawGlove } from '../draw';
 import { Effects } from '../effects';
 import type { Frame, Key, Scene, Stage } from '../stage';
-import { label, panel, ring } from '../ui';
+import { label, panel, ring, star } from '../ui';
 
 const GIGGLE_WORDS: TextKey[] = ['tickle.giggle1', 'tickle.giggle1', 'tickle.giggle2', 'tickle.giggle3'];
 const AWAY_PAUSE_SEC = 2;
 const RESULTS_SEC = 8;
 
-function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, filled: boolean): void {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    if (i === 0) ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    else ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-  }
-  ctx.closePath();
-  ctx.fillStyle = filled ? '#ffd600' : 'rgba(255,255,255,0.25)';
-  ctx.fill();
-}
 
 export class TickleScene implements Scene {
   readonly name = 'tickle-pop';

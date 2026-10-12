@@ -131,14 +131,14 @@ export class MenuScene implements Scene {
 
 /**
  * Where the game bubbles go: an arc above the head at raised-hand reach
- * (about 1.65 shoulder widths from the shoulders), 62° apart, first game on the
- * right. With little room above the head they stay as high as the picture
+ * (about 1.65 shoulder widths from the shoulders), 50–62° apart, first game
+ * on the right. With little room above the head they stay as high as the picture
  * allows and move outward just enough to keep clear of the head.
  */
 export function menuLayout(n: number, cx: number, shoulderY: number, s: number, rect: Rect): { r: number; at: Pt[] } {
   const r = Math.max(s * 0.5, rect.h * 0.065);
   const reach = s * 1.65;
-  const step = (62 * Math.PI) / 180;
+  const step = ((n <= 2 ? 62 : 50) * Math.PI) / 180;
   const top = rect.y + r * 1.1;
   // the head: about 0.75 s above the shoulders, radius about 0.45 s
   const headY = shoulderY - s * 0.75;
@@ -147,15 +147,33 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
   for (let i = 0; i < n; i++) {
     const a = ((n - 1) / 2 - i) * step;
     const side = a > 0 ? 1 : a < 0 ? -1 : i % 2 === 0 ? 1 : -1;
-    let x = cx + Math.sin(a) * reach;
-    const y = Math.max(top, shoulderY - Math.cos(a) * reach);
+    // straight up goes a little higher, to stay clear of the top of the head
+    const far = a === 0 ? reach + s * 0.2 : reach;
+    let x = cx + Math.sin(a) * far;
+    const y = Math.max(top, shoulderY - Math.cos(a) * far);
     // pushed down next to the head: move outward so it never covers the face
     const dy = Math.abs(y - headY);
     if (dy < clear) {
       const minDx = Math.sqrt(clear * clear - dy * dy);
       if (Math.abs(x - cx) < minDx) x = cx + side * minDx;
     }
-    at.push({ x: Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, x)), y });
+    at.push({ x, y });
   }
+  // Pushed-out bubbles can crowd each other: on each side of the head, move
+  // the outer ones further out (never back toward the face).
+  const need = r * 2.2;
+  for (const dir of [1, -1]) {
+    const group = at
+      .map((p, i) => ({ p, i }))
+      .filter(({ p, i }) => (p.x === cx ? (i % 2 === 0 ? 1 : -1) : Math.sign(p.x - cx)) === dir)
+      .sort((a, b) => Math.abs(a.p.x - cx) - Math.abs(b.p.x - cx));
+    for (let k = 1; k < group.length; k++) {
+      const prev = group[k - 1].p;
+      const cur = group[k].p;
+      const dy = cur.y - prev.y;
+      if (Math.hypot(cur.x - prev.x, dy) < need) cur.x = prev.x + dir * Math.sqrt(Math.max(0, need * need - dy * dy));
+    }
+  }
+  for (const p of at) p.x = Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, p.x));
   return { r, at };
 }

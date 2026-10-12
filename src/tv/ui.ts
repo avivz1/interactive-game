@@ -51,3 +51,17 @@ export function ring(ctx: CanvasRenderingContext2D, at: Pt, radius: number, prog
 }
 
 export const distance = (a: Pt, b: Pt): number => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+
+/** A five-pointed star for results screens (filled = earned). */
+export function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, filled: boolean): void {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    if (i === 0) ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    else ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle = filled ? '#ffd600' : 'rgba(255,255,255,0.25)';
+  ctx.fill();
+}

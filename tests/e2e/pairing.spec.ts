@@ -1,4 +1,10 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+
+/** Every TV and phone context a test opens; closed after it, so streams don't pile up. */
+const opened: BrowserContext[] = [];
+test.afterEach(async () => {
+  await Promise.all(opened.splice(0).map((ctx) => ctx.close().catch(() => undefined)));
+});
 
 interface TvDebug {
   videoWidth: number;
@@ -20,6 +26,7 @@ const english = () => {
 
 async function openTv(browser: Browser, path = '/tv/', lang: 'en' | 'default' = 'en'): Promise<Page> {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  opened.push(ctx);
   if (lang === 'en') await ctx.addInitScript(english);
   const tv = await ctx.newPage();
   await tv.goto(path);
@@ -29,6 +36,7 @@ async function openTv(browser: Browser, path = '/tv/', lang: 'en' | 'default' = 
 
 async function openPhone(browser: Browser, path: string, lang: 'en' | 'default' = 'en'): Promise<Page> {
   const ctx = await browser.newContext({ permissions: ['camera'], viewport: { width: 390, height: 844 } });
+  opened.push(ctx);
   if (lang === 'en') await ctx.addInitScript(english);
   const phone = await ctx.newPage();
   await phone.goto(path);
@@ -216,13 +224,24 @@ async function inkRests(tv: Page, ms: number, minInk: number): Promise<void> {
     .toBe(true);
 }
 
-/** Finish with OK once there is enough ink (whole: wait for one complete drawing, after ◀ start over). */
-async function drawAndFinish(tv: Page, whole = false): Promise<void> {
-  if (whole) {
-    await inkRests(tv, 2600, 0.3); // the drawing loop's pause
+/** Seconds since the phone's synthetic figure started (its drawing script loops every 16 s). */
+const synthTime = (phone: Page) =>
+  phone.evaluate(() => (performance.now() - ((window as unknown as { __synthStart?: number }).__synthStart || 0)) / 1000);
+
+/**
+ * Finish with OK once there is enough ink. With `phone` (the drawing figure):
+ * start over (◀) in the pause at the start of its 16 s loop and finish after
+ * that loop's last line, so exactly one whole creature is drawn.
+ */
+async function drawAndFinish(tv: Page, phone?: Page): Promise<void> {
+  if (phone) {
+    // wait for the pause at the start of a loop (the hand rests until 2.4 s)
+    await expect.poll(async () => (await synthTime(phone)) % 16, { timeout: 20_000, intervals: [100] }).toBeLessThan(1.2);
     await tv.keyboard.press('ArrowLeft');
-    await expect.poll(() => debugValue(tv, 'ink'), { timeout: 10_000 }).toBeGreaterThan(0.2);
-    await inkRests(tv, 2000, 2);
+    const startAt = await synthTime(phone);
+    const finishAt = startAt - (startAt % 16) + 15.7; // after the last leg and the hand's swoop out
+    await expect.poll(() => synthTime(phone), { timeout: 25_000, intervals: [200] }).toBeGreaterThanOrEqual(finishAt);
+    await inkRests(tv, 500, 2);
   } else {
     await expect.poll(() => debugValue(tv, 'ink'), { timeout: 20_000 }).toBeGreaterThanOrEqual(0.6);
   }
@@ -231,26 +250,28 @@ async function drawAndFinish(tv: Page, whole = false): Promise<void> {
 }
 
 test('Draw & Alive: the drawing goes to the creature AI and comes alive with its name', async ({ browser }) => {
+  test.setTimeout(120_000); // waits for one whole 16 s drawing loop, sometimes two
   const tv = await openTv(browser, '/tv/?round=6&draw=90');
   let sent: { lang?: string; image?: string } = {};
   await tv.route('**/api/creature', async (route) => {
     sent = JSON.parse(route.request().postData() || '{}');
+    if (sent.image) await test.info().attach('drawing.png', { body: Buffer.from(sent.image.split(',')[1], 'base64'), contentType: 'image/png' });
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ traits: { looksLike: 'fish', name: 'Bubbles', greeting: 'Hello!', personality: 'silly', move: 'swim', bodyColor: '#7ee0ff', accentColor: '#ffd23f', face: { x: 0.5, y: 0.4 } } }),
     });
   });
-  await pairPhone(browser, tv, DRAWING_PHONE);
+  const phone = await pairPhone(browser, tv, DRAWING_PHONE);
   await expectStreaming(tv);
   await openDrawGame(tv);
-  await drawAndFinish(tv, true);
+  await drawAndFinish(tv, phone);
 
   await expect.poll(() => debugValue(tv, 'drawPhase'), { timeout: 10_000 }).toBe('play');
   expect(await debugValue(tv, 'creatureSource')).toBe('ai');
-  // body, two ears, two legs (one more if a slow frame split a line or the loop restarted mid-way)
+  // body, two ears, two legs (one more if a slow frame split a line)
   expect(await debugValue(tv, 'strokes')).toBeGreaterThanOrEqual(5);
-  expect(await debugValue(tv, 'strokes')).toBeLessThanOrEqual(7);
+  expect(await debugValue(tv, 'strokes')).toBeLessThanOrEqual(6);
   expect(await debugValue(tv, 'fills')).toBeGreaterThanOrEqual(1); // the round body was recognised and filled
   expect(await debugValue(tv, 'creatureName')).toBe('Bubbles');
   expect(sent.lang).toBe('en');
@@ -274,4 +295,45 @@ test('Draw & Alive works without the AI (made locally)', async ({ browser }) => 
   // Back on the remote returns to the menu at any time.
   await tv.keyboard.press('Escape');
   await expect.poll(() => debugValue(tv, 'scene'), { timeout: 10_000 }).toBe('menu');
+});
+
+/** Opens Freeze Dance from the menu with the remote (◀ ◀ to the leftmost bubble, then OK). */
+async function openFreezeDance(tv: Page): Promise<void> {
+  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
+  await tv.waitForTimeout(300); // bubbles settle above the child
+  await tv.keyboard.press('ArrowLeft');
+  await tv.keyboard.press('ArrowLeft');
+  await expect
+    .poll(
+      async () => {
+        if ((await debugValue(tv, 'scene')) === 'menu') await tv.keyboard.press('Enter');
+        return debugValue(tv, 'scene');
+      },
+      { timeout: 10_000, intervals: [500] },
+    )
+    .toBe('freeze-dance');
+}
+
+test('Freeze Dance: a child who stands still is a statue', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const tv = await openTv(browser, '/tv/?round=8');
+  await pairPhone(browser, tv, '/phone/?pose=synthetic&act=still');
+  await expectStreaming(tv);
+  await openFreezeDance(tv);
+  await expect.poll(() => debugValue(tv, 'freezes'), { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => debugValue(tv, 'ended'), { timeout: 20_000 }).toBe(true);
+  expect(await debugValue(tv, 'statues')).toBeGreaterThanOrEqual(1);
+  expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 20_000 }).toBe('menu');
+});
+
+test('Freeze Dance: a child who keeps dancing gets a giggle, not a statue', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const tv = await openTv(browser, '/tv/?round=8');
+  await pairPhone(browser, tv, '/phone/?pose=synthetic&act=dance');
+  await expectStreaming(tv);
+  await openFreezeDance(tv);
+  await expect.poll(() => debugValue(tv, 'ended'), { timeout: 30_000 }).toBe(true);
+  expect(await debugValue(tv, 'wiggles')).toBeGreaterThanOrEqual(1);
+  expect(await debugValue(tv, 'statues')).toBe(0);
 });

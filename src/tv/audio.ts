@@ -25,6 +25,9 @@ export const VOICE_KEYS = [
   'alive',
   'play',
   'bye',
+  'freeze_intro',
+  'freeze',
+  'wiggle',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 
@@ -48,6 +51,8 @@ export class Sound {
   private master: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
+  /** The music bus was silenced by a hard stop. */
+  private musicCut = false;
   private musicStep = 0;
   private musicNext = 0;
   private samples: Partial<Record<SampleName, LoadedSample[]>> = {};
@@ -122,11 +127,11 @@ export class Sound {
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(this.master);
-    if (this.music) this.music.gain.setTargetAtTime(DUCKED, now, 0.08);
+    if (this.music && !this.musicCut) this.music.gain.setTargetAtTime(DUCKED, now, 0.08);
     src.onended = () => {
       if (this.speaking !== src) return;
       this.speaking = null;
-      if (this.music && this.ctx) this.music.gain.setTargetAtTime(1, this.ctx.currentTime, 0.2);
+      if (this.music && this.ctx && !this.musicCut) this.music.gain.setTargetAtTime(1, this.ctx.currentTime, 0.2);
     };
     this.speaking = src;
     src.start(now + 0.01);
@@ -212,7 +217,7 @@ export class Sound {
     return osc;
   }
 
-  private noise(at: number, dur: number, filter: BiquadFilterType, freq: number, vol: number, sweepTo?: number): void {
+  private noise(at: number, dur: number, filter: BiquadFilterType, freq: number, vol: number, sweepTo?: number, bus?: AudioNode | null): void {
     const ctx = this.ctx;
     if (!ctx || !this.master || ctx.state !== 'running') return;
     if (!this.noiseBuffer) {
@@ -231,7 +236,7 @@ export class Sound {
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     src.connect(f);
     f.connect(gain);
-    gain.connect(this.master);
+    gain.connect(bus || this.master);
     src.start(at);
     src.stop(at + dur + 0.02);
   }
@@ -324,16 +329,34 @@ export class Sound {
     [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.tone(f, t + i * 0.09, 0.25, 'triangle', 0.28));
   }
 
-  /** Light bouncy loop (pentatonic, so random notes always sound nice). */
-  startMusic(seed = 1): void {
+  /** Freeze Dance: the ice crackle when the music stops. */
+  ice(): void {
+    const t = this.now;
+    this.noise(t, 0.35, 'highpass', 6000, 0.25, 1500);
+    this.tone(1800, t, 0.3, 'sine', 0.12, 900);
+  }
+
+  /**
+   * Light bouncy loop (pentatonic, so random notes always sound nice). 'dance'
+   * adds a beat (kick, hi-hat, clap) and a little more tempo for Freeze Dance.
+   */
+  startMusic(seed = 1, style: 'calm' | 'dance' = 'calm'): void {
     if (this.musicTimer || !this.ctx) return;
+    if (this.musicCut && this.music) {
+      // undo a hard stop
+      const now = this.ctx.currentTime;
+      this.music.gain.cancelScheduledValues(now);
+      this.music.gain.setValueAtTime(1, now);
+      this.musicCut = false;
+    }
+    const dance = style === 'dance';
     let s = seed;
     const pattern: number[] = [];
     for (let i = 0; i < 16; i++) {
       s = (s * 9301 + 49297) % 233280;
       pattern.push(i % 4 === 3 && s % 3 === 0 ? -1 : s % PENTATONIC.length);
     }
-    const stepSec = 60 / 112 / 2;
+    const stepSec = 60 / (dance ? 124 : 112) / 2;
     this.musicStep = 0;
     this.musicNext = 0;
     this.musicTimer = setInterval(() => {
@@ -343,7 +366,12 @@ export class Sound {
       while (this.musicNext < ctx.currentTime + 0.25) {
         const step = this.musicStep % 16;
         const note = pattern[step];
-        if (note >= 0) this.tone(PENTATONIC[note], this.musicNext, stepSec * 0.9, 'square', 0.035, undefined, this.music);
+        if (note >= 0) this.tone(PENTATONIC[note], this.musicNext, stepSec * 0.9, 'square', dance ? 0.045 : 0.035, undefined, this.music);
+        if (dance) {
+          if (step % 4 === 0) this.tone(140, this.musicNext, 0.18, 'sine', 0.5, 45, this.music); // kick
+          if (step % 2 === 1) this.noise(this.musicNext, 0.04, 'highpass', 7000, 0.12, undefined, this.music); // hi-hat
+          if (step % 8 === 4) this.noise(this.musicNext, 0.12, 'bandpass', 1500, 0.25, undefined, this.music); // clap
+        }
         if (step % 4 === 0) {
           this.tone(PENTATONIC[[0, 3, 4, 2][Math.floor(step / 4)]] / 4, this.musicNext, stepSec * 1.8, 'triangle', 0.12, undefined, this.music);
         }
@@ -353,8 +381,16 @@ export class Sound {
     }, 60);
   }
 
-  stopMusic(): void {
+  /** Stops the music; `cut` also silences notes already scheduled (Freeze Dance's sudden stop). */
+  stopMusic(cut = false): void {
     if (this.musicTimer) clearInterval(this.musicTimer);
     this.musicTimer = null;
+    if (cut && this.ctx && this.music) {
+      const now = this.ctx.currentTime;
+      this.music.gain.cancelScheduledValues(now);
+      this.music.gain.setValueAtTime(this.music.gain.value, now);
+      this.music.gain.linearRampToValueAtTime(0.0001, now + 0.05);
+      this.musicCut = true;
+    }
   }
 }

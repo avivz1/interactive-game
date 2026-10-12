@@ -270,6 +270,23 @@ function drawScriptAt(tSec: number): [number, number] {
   return [last[1], last[2]];
 }
 
+/** The synthetic figure dancing hard: bouncing with both arms waving (`act=dance`). */
+export function syntheticDancer(tSec: number): Landmark[] {
+  const pts = syntheticFigure(tSec);
+  const bounce = Math.sin(tSec * 8) * 0.04;
+  const wave = Math.sin(tSec * 6) * 0.1;
+  return pts.map((p, i) => {
+    if (!p.visibility) return p;
+    const arm = i === LM.leftWrist || i === LM.rightWrist ? wave : i === LM.leftElbow || i === LM.rightElbow ? wave * 0.5 : 0;
+    return { x: p.x, y: p.y + bounce - arm, visibility: p.visibility };
+  });
+}
+
+/** The synthetic figure standing perfectly still (`act=still`, for Freeze Dance tests). */
+export function syntheticStill(): Landmark[] {
+  return syntheticFigure(0);
+}
+
 /** The synthetic figure drawing a creature with its left hand (for Draw & Alive tests). */
 export function syntheticDrawer(tSec: number): Landmark[] {
   const pts = syntheticFigure(tSec);
@@ -295,6 +312,8 @@ export class SyntheticPose implements PoseSource {
 
   async start(_video: HTMLVideoElement, onPose: PoseHandler): Promise<void> {
     const t0 = performance.now();
+    // tests read this to time the synthetic figure's scripted moves
+    (window as unknown as { __synthStart?: number }).__synthStart = t0;
     this.timer = setInterval(() => {
       this.rate.tick();
       const now = performance.now();

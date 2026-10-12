@@ -3,12 +3,13 @@
 Motion games for kids on the TV. A phone is the camera: it streams video and
 body tracking to the TV over the home Wi-Fi.
 
-Current state: pairing + two games. The phone pairs with the TV (QR code
+Current state: pairing + three games. The phone pairs with the TV (QR code
 or 6-digit code), the child sees themselves mirrored on the TV with glowing
 "magic gloves" on their hands, then:
 
 1. **Setup** — "step back until you fit" until the whole body is visible.
-2. **Menu** — raise a hand onto a game bubble and hold it (or press OK).
+2. **Menu** — the game bubbles float above the head; raise a hand onto one and
+   hold it (or use ◀ ▶ and OK on the remote).
    Remote ▼ opens the **TV check** screen (connection and tracking details).
 3. **Tickle Pop** — hold a hand on the bubble-creatures to tickle them until
    they pop (a lifted foot works too). Sneezy ones pop their neighbours; sleepy
@@ -19,6 +20,9 @@ or 6-digit code), the child sees themselves mirrored on the TV with glowing
    (remote: OK; ◀ starts over), 25 seconds. The drawing comes alive — filled
    with colour, with eyes, a smile and feet or wings — and gets a name. Then
    pet it (a moving hand), jump with it, cover your eyes for peekaboo.
+5. **Freeze Dance** — dance while the music plays; when it stops ("Freeze!"),
+   hold still for 3 seconds while a friendly monster watches. A statue earns
+   a star, a wiggle earns a giggle; nobody is ever out.
 
 Spoken instructions in Hebrew (default), Arabic or English: choose with the
 buttons on the phone, or ◀ ▶ on the TV pairing screen.
@@ -90,7 +94,8 @@ npm run test:e2e  # Playwright: TV + phone pages with a fake camera
 ```
 
 `/phone/?pose=synthetic` replaces body tracking with a dancing stick figure
-(`&act=draw`: it draws a creature with one hand). `/tv/?round=10` shortens game
+(`&act=draw`: it draws a creature with one hand; `&act=still` stands still;
+`&act=dance` never stops dancing). `/tv/?round=10` shortens game
 rounds and `?draw=10` the drawing time (for testing).
 
 Voice lines are listed in `scripts/voice-lines.json` and recorded with
@@ -101,5 +106,6 @@ Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts
 `src/games/*` (game rules, unit-tested without drawing), `src/tv/audio.ts`
 (sound samples in `public/sounds/` with synthesized fallbacks, voice lines),
 `src/shared/i18n.ts` (texts), `src/tv/creature-art.ts` + `src/games/drawing.ts` +
-`src/games/creature.ts` (Draw & Alive), `server/creature.ts` + `server/ai.ts`
-(creature AI endpoint).
+`src/games/creature.ts` (Draw & Alive), `src/games/freeze-dance.ts` (Freeze
+Dance rules and the movement meter), `src/games/limbs.ts` (which hands and feet
+may touch creatures), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).

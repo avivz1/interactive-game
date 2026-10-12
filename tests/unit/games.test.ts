@@ -168,3 +168,20 @@ describe('menu layout', () => {
     }
   });
 });
+
+describe('menu layout with three games', () => {
+  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+  for (const shoulderY of [180, 300, 500]) {
+    it(`never overlaps bubbles or covers the face (shoulders at ${shoulderY})`, async () => {
+      const { menuLayout } = await import('../../src/tv/scenes/menu');
+      const s = 150;
+      const { r, at } = menuLayout(3, 960, shoulderY, s, rect);
+      for (let i = 0; i < 3; i++)
+        for (let j = i + 1; j < 3; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+      for (const p of at) {
+        expect(Math.hypot(p.x - 960, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
+        expect(p.y - r).toBeGreaterThanOrEqual(0);
+      }
+    });
+  }
+});

@@ -16,7 +16,7 @@ import { drawCreature, drawingPng, drawInk, heart, InkLayer, PEN_COLORS } from '
 import { drawBody, drawGlove } from '../draw';
 import { Effects } from '../effects';
 import type { Frame, Key, Scene, Stage } from '../stage';
-import { distance, label, panel, ring } from '../ui';
+import { distance, label, panel, ring, star } from '../ui';
 
 type Phase = 'draw' | 'magic' | 'play' | 'end';
 
@@ -91,18 +91,6 @@ function again(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): 
   ctx.fill();
 }
 
-function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, filled: boolean): void {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    if (i === 0) ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    else ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-  }
-  ctx.closePath();
-  ctx.fillStyle = filled ? '#ffd600' : 'rgba(255,255,255,0.25)';
-  ctx.fill();
-}
 
 export class DrawScene implements Scene {
   readonly name = 'draw-alive';
