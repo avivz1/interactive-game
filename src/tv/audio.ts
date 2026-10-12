@@ -1,8 +1,18 @@
-// Synthesized sound effects and a light music loop (Web Audio, no audio files).
-// Browsers start audio suspended until a user gesture, so unlock() runs on the
-// first remote key press or click.
+// Sound effects (recorded samples with a synthesized fallback) and a light
+// music loop, on Web Audio. Browsers start audio suspended until a user
+// gesture, so unlock() runs on the first remote key press or click.
+
+import { SAMPLES, type SampleDef, type SampleName } from './sounds';
 
 type Ctx = AudioContext;
+
+/** Most voices that may giggle at once, so laughter stacks without becoming noise. */
+const MAX_VOICES = 4;
+
+interface LoadedSample {
+  def: SampleDef;
+  buffer: AudioBuffer;
+}
 
 const PENTATONIC = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
 
@@ -13,6 +23,8 @@ export class Sound {
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   private musicStep = 0;
   private musicNext = 0;
+  private samples: Partial<Record<SampleName, LoadedSample[]>> = {};
+  private voices = 0;
 
   constructor() {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -25,6 +37,51 @@ export class Sound {
     } catch (_e) {
       this.ctx = null;
     }
+    if (this.ctx) this.loadSamples();
+  }
+
+  /** Fetches and decodes the sample files; any that fail keep the synthesized sound. */
+  private loadSamples(): void {
+    const ctx = this.ctx;
+    if (!ctx || typeof fetch !== 'function') return;
+    (Object.keys(SAMPLES) as SampleName[]).forEach((name) => {
+      for (const def of SAMPLES[name]) {
+        fetch(def.url)
+          .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error('HTTP ' + res.status))))
+          // callback form: old TV engines lack the promise version
+          .then((data) => new Promise<AudioBuffer>((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
+          .then((buffer) => {
+            const list = this.samples[name] || (this.samples[name] = []);
+            list.push({ def, buffer });
+          })
+          .catch(() => undefined);
+      }
+    });
+  }
+
+  /** Plays a random (or chosen) take of a sample; returns false if none is loaded. */
+  private play(name: SampleName, variant?: number, voice = false): boolean {
+    const ctx = this.ctx;
+    const list = this.samples[name];
+    if (!ctx || !this.master || ctx.state !== 'running' || !list || list.length === 0) return false;
+    if (voice && this.voices >= MAX_VOICES) return true; // enough giggling already
+    const take = list[(variant !== undefined ? variant : Math.floor(Math.random() * list.length)) % list.length];
+    const src = ctx.createBufferSource();
+    src.buffer = take.buffer;
+    const gain = ctx.createGain();
+    gain.gain.value = take.def.gain !== undefined ? take.def.gain : 1;
+    src.connect(gain);
+    gain.connect(this.master);
+    const start = take.def.start || 0;
+    const end = take.def.end !== undefined ? Math.min(take.def.end, take.buffer.duration) : take.buffer.duration;
+    src.start(ctx.currentTime + 0.005, start, Math.max(0.05, end - start));
+    if (voice) {
+      this.voices++;
+      src.onended = () => {
+        this.voices = Math.max(0, this.voices - 1);
+      };
+    }
+    return true;
   }
 
   /** Sound can play (the browser allowed audio). */
@@ -83,6 +140,7 @@ export class Sound {
   }
 
   pop(): void {
+    if (this.play('pop')) return;
     const t = this.now;
     this.noise(t, 0.08, 'highpass', 1800, 0.5);
     this.tone(900, t, 0.1, 'sine', 0.35, 180);
@@ -90,6 +148,8 @@ export class Sound {
 
   /** "Hee-hee": more notes and higher pitch for each giggle stage. */
   giggle(stage: number, voice = 0): void {
+    if (stage >= 3 ? this.play('laugh', voice, true) : stage === 1 && this.play('giggle', voice, true)) return;
+    if (stage === 2 && this.samples.giggle) return; // the stage-1 giggle is still playing
     const t = this.now;
     const base = 620 + stage * 90 + (voice % 3) * 70;
     for (let i = 0; i <= stage; i++) {
@@ -109,27 +169,33 @@ export class Sound {
     }
   }
 
-  whoosh(): void {
+  /** A popped critter floats away. */
+  wheee(): void {
+    if (this.play('wheee')) return;
     this.noise(this.now, 0.45, 'bandpass', 400, 0.25, 2200);
   }
 
   achoo(): void {
+    if (this.play('achoo')) return;
     const t = this.now;
     this.tone(300, t, 0.28, 'sawtooth', 0.08, 420);
     this.noise(t + 0.3, 0.25, 'highpass', 2500, 0.45);
   }
 
   yawn(): void {
+    if (this.play('yawn')) return;
     this.tone(420, this.now, 0.6, 'triangle', 0.15, 220);
   }
 
   select(): void {
+    if (this.play('select')) return;
     const t = this.now;
     this.tone(880, t, 0.12, 'sine', 0.3);
     this.tone(1320, t + 0.1, 0.18, 'sine', 0.3);
   }
 
   cheer(): void {
+    if (this.play('cheer')) return;
     const t = this.now;
     [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.tone(f, t + i * 0.09, 0.25, 'triangle', 0.28));
   }

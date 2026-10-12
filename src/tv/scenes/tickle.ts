@@ -106,7 +106,7 @@ export class TickleScene implements Scene {
           sound.yawn();
           this.effects.say('Good morning!', e.bubble.x, e.bubble.y - e.bubble.r, unit * 0.35, '#7ee0ff', 1.1, 'b' + e.bubble.id);
         } else {
-          sound.whoosh();
+          sound.wheee();
           this.effects.say('Wheee!', e.bubble.x, e.bubble.y, unit * 0.35, '#fff', 1.1, 'b' + e.bubble.id);
         }
         this.stage.debug({ popped: this.game.popped });

@@ -3,9 +3,19 @@
 Motion games for kids on the TV. A phone is the camera: it streams video and
 body tracking to the TV over the home Wi-Fi.
 
-Current milestone: **M1 — TV test**. The phone pairs with the TV (QR code or
-6-digit code), the TV shows the child's mirrored video with the tracked body
-drawn on top, and tells you whether this TV can run the games.
+Current state: pairing + the first game. The phone pairs with the TV (QR code
+or 6-digit code), the child sees themselves mirrored on the TV with glowing
+"magic gloves" on their hands, then:
+
+1. **Setup** — "step back until you fit" until the whole body is visible.
+2. **Menu** — raise a hand onto a game bubble and hold it (or press OK).
+   Remote ▼ opens the **TV check** screen (connection and tracking details).
+3. **Tickle Pop** — hold a hand on the bubble-creatures to tickle them until
+   they pop. Sneezy ones pop their neighbours; sleepy ones wake up with a head
+   boop. 60-second rounds, always at least one star.
+
+Press OK on the TV remote once to turn the sound on (browsers block audio
+until a key press).
 
 ## How it works
 
@@ -60,3 +70,9 @@ npm run test:e2e  # Playwright: TV + phone pages with a fake camera
 ```
 
 `/phone/?pose=synthetic` replaces body tracking with a dancing stick figure.
+`/tv/?round=10` shortens Tickle Pop rounds (for testing).
+
+Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts`
+(scenes + remote keys), `src/tv/scenes/*` (setup, menu, games, TV check),
+`src/games/*` (game rules, unit-tested without drawing), `src/tv/audio.ts`
+(sound samples in `public/sounds/` with synthesized fallbacks).
