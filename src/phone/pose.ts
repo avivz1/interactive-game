@@ -282,6 +282,26 @@ export function syntheticDancer(tSec: number): Landmark[] {
   });
 }
 
+/**
+ * The synthetic figure that, after 11 s (by then the test has reached the game,
+ * so raised hands can't pick a menu bubble), holds both arms up in a Y
+ * (`act=armsup`, for Mirror Monster tests).
+ */
+export function syntheticArmsUp(tSec: number): Landmark[] {
+  const pts = syntheticFigure(tSec);
+  if (tSec < 11) return pts;
+  const sway = Math.sin(tSec * 1.5) * 0.03;
+  const set = (i: number, x: number, y: number) => {
+    pts[i] = { x: x + sway, y, visibility: 0.99 };
+  };
+  // before mirroring: the figure's left arm is on the right of the picture
+  set(LM.leftElbow, 0.64, 0.24);
+  set(LM.leftWrist, 0.69, 0.14);
+  set(LM.rightElbow, 0.36, 0.24);
+  set(LM.rightWrist, 0.31, 0.14);
+  return pts;
+}
+
 /** The synthetic figure standing perfectly still (`act=still`, for Freeze Dance tests). */
 export function syntheticStill(): Landmark[] {
   return syntheticFigure(0);

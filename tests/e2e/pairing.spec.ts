@@ -186,24 +186,42 @@ test('Hebrew by default, and the language chosen on the phone reaches the TV', a
 /** The synthetic figure that draws a creature (body, ears, legs) with its left hand, in a 16 s loop. */
 const DRAWING_PHONE = '/phone/?pose=synthetic&act=draw';
 
-/** Opens Draw & Alive from the menu with the remote (◀ to its tile, left of the child, then OK). */
-async function openDrawGame(tv: Page): Promise<void> {
-  // the drawing figure's hand may already have picked it from the menu
-  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toMatch(/^(menu|draw-alive)$/);
-  if ((await debugValue(tv, 'scene')) === 'menu') {
-    await tv.waitForTimeout(300); // tiles settle above the child
-    await tv.keyboard.press('ArrowLeft');
+const GAMES = ['tickle-pop', 'draw-alive', 'freeze-dance', 'mirror-monster'];
+
+/**
+ * Opens a game from the menu with the remote: ▶ ▶ ▶ to the rightmost bubble,
+ * then ◀ `lefts` times, then OK. If a hand picked another game on its own,
+ * goes back and tries again.
+ */
+async function openGame(tv: Page, scene: string, lefts: number): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toMatch(/^(menu|tickle-pop|draw-alive|freeze-dance|mirror-monster)$/);
+    const now = (await debugValue(tv, 'scene')) as string;
+    if (now === scene) return;
+    if (GAMES.indexOf(now) >= 0) {
+      await tv.keyboard.press('Escape');
+      await expect.poll(() => debugValue(tv, 'scene'), { timeout: 5_000 }).toBe('menu');
+    }
+    await tv.waitForTimeout(300); // bubbles settle above the child
+    for (let i = 0; i < 3; i++) await tv.keyboard.press('ArrowRight');
+    for (let i = 0; i < lefts; i++) await tv.keyboard.press('ArrowLeft');
+    let reached = '';
+    await expect
+      .poll(
+        async () => {
+          if ((await debugValue(tv, 'scene')) === 'menu') await tv.keyboard.press('Enter');
+          reached = (await debugValue(tv, 'scene')) as string;
+          return reached !== 'menu';
+        },
+        { timeout: 10_000, intervals: [500] },
+      )
+      .toBe(true);
+    if (reached === scene) return;
   }
-  await expect
-    .poll(
-      async () => {
-        if ((await debugValue(tv, 'scene')) === 'menu') await tv.keyboard.press('Enter');
-        return debugValue(tv, 'scene');
-      },
-      { timeout: 10_000, intervals: [500] },
-    )
-    .toBe('draw-alive');
+  throw new Error('could not open ' + scene);
 }
+
+const openDrawGame = (tv: Page) => openGame(tv, 'draw-alive', 1);
 
 /** Resolves once the ink stays the same for `ms` with at least `minInk` drawn (the hand rests). */
 async function inkRests(tv: Page, ms: number, minInk: number): Promise<void> {
@@ -297,22 +315,7 @@ test('Draw & Alive works without the AI (made locally)', async ({ browser }) => 
   await expect.poll(() => debugValue(tv, 'scene'), { timeout: 10_000 }).toBe('menu');
 });
 
-/** Opens Freeze Dance from the menu with the remote (◀ ◀ to the leftmost bubble, then OK). */
-async function openFreezeDance(tv: Page): Promise<void> {
-  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
-  await tv.waitForTimeout(300); // bubbles settle above the child
-  await tv.keyboard.press('ArrowLeft');
-  await tv.keyboard.press('ArrowLeft');
-  await expect
-    .poll(
-      async () => {
-        if ((await debugValue(tv, 'scene')) === 'menu') await tv.keyboard.press('Enter');
-        return debugValue(tv, 'scene');
-      },
-      { timeout: 10_000, intervals: [500] },
-    )
-    .toBe('freeze-dance');
-}
+const openFreezeDance = (tv: Page) => openGame(tv, 'freeze-dance', 2);
 
 test('Freeze Dance: a child who stands still is a statue', async ({ browser }) => {
   test.setTimeout(90_000);
@@ -337,3 +340,16 @@ test('Freeze Dance: a child who keeps dancing gets a giggle, not a statue', asyn
   expect(await debugValue(tv, 'wiggles')).toBeGreaterThanOrEqual(1);
   expect(await debugValue(tv, 'statues')).toBe(0);
 });
+
+test('Mirror Monster: copying the arms-up pose earns a star', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const tv = await openTv(browser, '/tv/?round=12');
+  await pairPhone(browser, tv, '/phone/?pose=synthetic&act=armsup');
+  await expectStreaming(tv);
+  await openGame(tv, 'mirror-monster', 3); // the fourth bubble is the leftmost
+  await expect.poll(() => debugValue(tv, 'poseId'), { timeout: 10_000 }).toBe('arms-up');
+  await expect.poll(() => debugValue(tv, 'wins'), { timeout: 25_000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => debugValue(tv, 'ended'), { timeout: 30_000 }).toBe(true);
+  expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
+});
+

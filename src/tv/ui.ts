@@ -17,6 +17,13 @@ export function label(ctx: CanvasRenderingContext2D, text: string, x: number, y:
   ctx.fillText(text, x, y);
 }
 
+/** Like label(), but shrinks the text so it is never wider than maxWidth. */
+export function fitLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, maxWidth: number, color = '#fff'): void {
+  ctx.font = '800 ' + Math.round(size) + 'px ' + FONT;
+  const w = ctx.measureText(text).width;
+  label(ctx, text, x, y, w > maxWidth && w > 0 ? Math.max(12, (size * maxWidth) / w) : size, color);
+}
+
 /** A rounded panel behind text or a menu tile. */
 export function panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, hgt: number, r: number, fill: string, stroke?: string): void {
   ctx.beginPath();

@@ -3,7 +3,7 @@
 Motion games for kids on the TV. A phone is the camera: it streams video and
 body tracking to the TV over the home Wi-Fi.
 
-Current state: pairing + three games. The phone pairs with the TV (QR code
+Current state: pairing + four games. The phone pairs with the TV (QR code
 or 6-digit code), the child sees themselves mirrored on the TV with glowing
 "magic gloves" on their hands, then:
 
@@ -23,6 +23,10 @@ or 6-digit code), the child sees themselves mirrored on the TV with glowing
 5. **Freeze Dance** — dance while the music plays; when it stops ("Freeze!"),
    hold still for 3 seconds while a friendly monster watches. A statue earns
    a star, a wiggle earns a giggle; nobody is ever out.
+6. **Mirror Monster** — a monster beside the child strikes a pose (arms up,
+   airplane, one arm up, muscles, hands on hips or head, star); a faint outline
+   of the pose sits on the child's body and turns green limb by limb. Hold it
+   for a second to earn a star; a pose that is too hard moves on with a shrug.
 
 Spoken instructions in Hebrew (default), Arabic or English: choose with the
 buttons on the phone, or ◀ ▶ on the TV pairing screen.
@@ -95,7 +99,7 @@ npm run test:e2e  # Playwright: TV + phone pages with a fake camera
 
 `/phone/?pose=synthetic` replaces body tracking with a dancing stick figure
 (`&act=draw`: it draws a creature with one hand; `&act=still` stands still;
-`&act=dance` never stops dancing). `/tv/?round=10` shortens game
+`&act=dance` never stops dancing; `&act=armsup` raises both arms after 11 s). `/tv/?round=10` shortens game
 rounds and `?draw=10` the drawing time (for testing).
 
 Voice lines are listed in `scripts/voice-lines.json` and recorded with
@@ -108,4 +112,4 @@ Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts
 `src/shared/i18n.ts` (texts), `src/tv/creature-art.ts` + `src/games/drawing.ts` +
 `src/games/creature.ts` (Draw & Alive), `src/games/freeze-dance.ts` (Freeze
 Dance rules and the movement meter), `src/games/limbs.ts` (which hands and feet
-may touch creatures), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).
+may touch creatures), `src/games/mirror.ts` (Mirror Monster poses and matching), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).

@@ -28,6 +28,9 @@ export const VOICE_KEYS = [
   'freeze_intro',
   'freeze',
   'wiggle',
+  'mirror_intro',
+  'hold',
+  'did_it',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

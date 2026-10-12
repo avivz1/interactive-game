@@ -202,3 +202,20 @@ describe('menu layout at the screen edge', () => {
       }
   });
 });
+
+describe('menu layout with four games', () => {
+  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+  for (const [cx, shoulderY] of [[960, 500], [960, 200], [150, 400], [1800, 300]] as Array<[number, number]>) {
+    it(`keeps four bubbles apart and off the face (child at ${cx},${shoulderY})`, async () => {
+      const { menuLayout } = await import('../../src/tv/scenes/menu');
+      const s = 150;
+      const { r, at } = menuLayout(4, cx, shoulderY, s, rect);
+      for (let i = 0; i < 4; i++)
+        for (let j = i + 1; j < 4; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+      for (const p of at) {
+        expect(p.x - r).toBeGreaterThanOrEqual(0);
+        expect(p.x + r).toBeLessThanOrEqual(1920);
+      }
+    });
+  }
+});

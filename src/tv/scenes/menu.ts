@@ -9,7 +9,7 @@ import { t, type TextKey } from '../../shared/i18n';
 import { drawCritter } from '../critters';
 import { drawBody } from '../draw';
 import type { Frame, Key, Scene, Stage } from '../stage';
-import { distance, label, ring } from '../ui';
+import { distance, fitLabel, label, ring } from '../ui';
 import type { Rect } from '../../shared/mapping';
 
 export interface MenuItem {
@@ -137,7 +137,8 @@ export class MenuScene implements Scene {
       drawCritter(ctx, { x: at.x, y: at.y, r: tile.r, color: tile.item.color, kind: 'normal', stage: tile.dwell.progress > 0 ? 2 : 0, age: this.age, touched: false }, look);
       ring(ctx, at, tile.r * 1.12, tile.dwell.progress, '#ffd600', Math.max(6, tile.r * 0.1));
       if (i === this.focus && this.tiles.length > 1) ring(ctx, at, tile.r * 1.3, 0, '#fff', 3);
-      label(ctx, t(tile.item.title), at.x, at.y + tile.r * 1.45, Math.max(24, tile.r * 0.32), '#fff');
+      // names shrink to their bubble's width so neighbours never overlap
+      fitLabel(ctx, t(tile.item.title), at.x, at.y + tile.r * 1.45, Math.max(24, tile.r * 0.32), tile.r * 2.1, '#fff');
     });
     // the top of the screen belongs to the game bubbles
     label(ctx, t('menu.title'), width / 2, height * 0.83, height * 0.045, '#ffd600');
@@ -155,7 +156,7 @@ export class MenuScene implements Scene {
 export function menuLayout(n: number, cx: number, shoulderY: number, s: number, rect: Rect): { r: number; at: Pt[] } {
   const r = Math.max(s * 0.5, rect.h * 0.065);
   const reach = s * 1.65;
-  const step = ((n <= 2 ? 62 : 50) * Math.PI) / 180;
+  const step = ((n <= 2 ? 62 : n === 3 ? 50 : 40) * Math.PI) / 180;
   const top = rect.y + r * 1.1;
   // the head: about 0.75 s above the shoulders, radius about 0.45 s
   const headY = shoulderY - s * 0.75;

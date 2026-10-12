@@ -110,6 +110,21 @@
       "en": "[laughs] I saw you wiggle!",
       "he": "[laughs] ראיתי אתכם זזים!",
       "ar": "[laughs] رأيتكم تتحركون!"
+    },
+    "mirror_intro": {
+      "en": "Copy the monster's pose, and hold it!",
+      "he": "חקו את התנוחה של המפלצת, והחזיקו!",
+      "ar": "قلّدوا وضعية الوحش، واثبتوا!"
+    },
+    "hold": {
+      "en": "[excited] Hold it!",
+      "he": "[excited] החזיקו!",
+      "ar": "[excited] اثبتوا!"
+    },
+    "did_it": {
+      "en": "[excited] You did it!",
+      "he": "[excited] הצלחתם!",
+      "ar": "[excited] نجحتم!"
     }
   }
 }
