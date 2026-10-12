@@ -4,7 +4,7 @@
 // on with a shrug — never a "fail".
 
 import type { Pt } from '../../shared/body';
-import { matchPose, MirrorGame, segmentJoints, SEGMENTS, type Match, type MirrorEvent, type Segment } from '../../games/mirror';
+import { matchPose, MIN_POSE_SEC, MirrorGame, segmentJoints, SEGMENTS, type Match, type MirrorEvent, type Segment } from '../../games/mirror';
 import { t, type TextKey } from '../../shared/i18n';
 import { CRITTER_COLORS, drawCritter } from '../critters';
 import { drawBody } from '../draw';
@@ -19,10 +19,13 @@ const REST: Record<Segment, number> = { lUpper: 100, lFore: 95, rUpper: 80, rFor
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
-/** Moves an angle toward a target along the shorter way round. */
-function turn(from: number, to: number, k: number): number {
-  const d = ((((to - from) % 360) + 540) % 360) - 180;
-  return from + d * k;
+/**
+ * The angle written so that turning to it never swings a limb through the
+ * monster's body: screen-left limbs use 0..360 (they pass through "left",
+ * 180), screen-right limbs use -180..180 (they pass through "right", 0).
+ */
+function outward(seg: Segment, deg: number): number {
+  return seg.charAt(0) === 'l' ? (((deg % 360) + 360) % 360) : ((((deg + 180) % 360) + 360) % 360) - 180;
 }
 
 export class MirrorScene implements Scene {
@@ -41,6 +44,8 @@ export class MirrorScene implements Scene {
   private monster: { x: number; y: number; r: number; side: number } | null = null;
   /** The monster's limb angles as drawn (they swing into each new pose). */
   private limbs: Record<Segment, number> = { ...REST };
+  /** A shrug's wiggle, added only when drawing (so it never twists the limbs). */
+  private wiggle = 0;
   private lastDebug = 0;
 
   constructor(
@@ -90,9 +95,11 @@ export class MirrorScene implements Scene {
     const k = Math.min(1, dt * 7);
     for (const seg of SEGMENTS) {
       const aim = g.phase === 'pose' || g.phase === 'win' ? g.pose.aims[seg] : undefined;
-      const wiggle = g.phase === 'miss' ? Math.sin(this.clock * 14) * 25 : 0;
-      this.limbs[seg] = turn(this.limbs[seg], (aim ? aim.deg : REST[seg]) + wiggle, k);
+      const target = outward(seg, aim ? aim.deg : REST[seg]);
+      this.limbs[seg] = outward(seg, this.limbs[seg]);
+      this.limbs[seg] += (target - this.limbs[seg]) * k;
     }
+    this.wiggle = g.phase === 'miss' ? Math.sin(this.clock * 14) * 25 : 0;
 
     if (this.result) {
       this.resultFor += dt;
@@ -138,8 +145,8 @@ export class MirrorScene implements Scene {
         this.stage.debug({ wins: e.wins });
         break;
       case 'miss':
-        sound.giggle(2, this.game.posesShown);
-        this.show('mm.next', '#ffffff', 1.2);
+        sound.giggle(1, this.game.posesShown);
+        if (this.game.remaining >= MIN_POSE_SEC) this.show('mm.next', '#ffffff', 1.2);
         break;
       case 'end':
         this.result = { wins: e.wins, stars: e.stars };
@@ -159,9 +166,15 @@ export class MirrorScene implements Scene {
     const cx = (ls.x + rs.x) / 2;
     const sy = (ls.y + rs.y) / 2;
     const r = Math.max(s * 0.95, rect.h * 0.1);
-    // arms out wide reach about 2 critter radii: keep clear of the child's own arms
-    const gap = s * 1.7 + r * 1.3;
-    const fits = (dir: number) => (dir > 0 ? rect.x + rect.w - cx : cx - rect.x) >= gap + r * 1.2;
+    // Keep clear of the child's own outstretched arm (measured when tracked):
+    // the monster's arms reach about 1.4 r from its middle.
+    let reach = s * 2.4;
+    const sh = body.points[11];
+    const el = body.points[13];
+    const wr = body.points[15];
+    if (sh && el && wr) reach = s * 0.5 + Math.hypot(el.x - sh.x, el.y - sh.y) + 1.35 * Math.hypot(wr.x - el.x, wr.y - el.y) + s * 0.35;
+    const gap = Math.max(s * 2.4, reach) + r * 1.4 + s * 0.2;
+    const fits = (dir: number) => (dir > 0 ? rect.x + rect.w - cx : cx - rect.x) >= gap + r * 1.4;
     let side = this.monster ? this.monster.side : rect.x + rect.w - cx >= cx - rect.x ? 1 : -1;
     if (!fits(side) && fits(-side)) side = -side;
     // outstretched arms reach about 1.3 r from the middle: keep them on screen
@@ -210,7 +223,9 @@ export class MirrorScene implements Scene {
       ctx.fill();
       ctx.stroke();
     };
-    const L = this.limbs;
+    const w = this.wiggle;
+    const L: Record<Segment, number> = { ...this.limbs };
+    for (const seg of SEGMENTS) L[seg] += w;
     // legs behind the body, arms in front
     limb({ x: x - br * 0.45, y: y + br * 0.75 }, L.lThigh, br * 0.6, L.lShin, br * 0.55, br * 0.17);
     limb({ x: x + br * 0.45, y: y + br * 0.75 }, L.rThigh, br * 0.6, L.rShin, br * 0.55, br * 0.17);

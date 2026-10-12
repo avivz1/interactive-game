@@ -106,23 +106,10 @@ export class MenuScene implements Scene {
 
   onKey(key: Key): void {
     if (key === 'left' || key === 'right') {
-      // move to the nearest tile on that side of the screen (tiles alternate sides)
-      const cur = this.tiles[this.focus].at;
-      let best = -1;
-      let bestD = Infinity;
-      const r = this.tiles[this.focus].r;
-      this.tiles.forEach((tile, i) => {
-        const dx = tile.at.x - cur.x;
-        // a bubble stacked right below or above (against a screen edge) is reachable both ways
-        const stacked = Math.abs(dx) < r * 0.5;
-        if (i === this.focus || (!stacked && (key === 'left' ? dx >= 0 : dx <= 0))) return;
-        const d = Math.abs(dx) + Math.abs(tile.at.y - cur.y) * 0.5 + (stacked ? r : 0);
-        if (d < bestD) {
-          bestD = d;
-          best = i;
-        }
-      });
-      if (best >= 0) this.focus = best;
+      // bubbles are laid out right to left in list order, so the remote follows the list
+      // (it works even when a bubble at a screen edge was moved down a row)
+      const n = this.tiles.length;
+      this.focus = key === 'left' ? Math.min(n - 1, this.focus + 1) : Math.max(0, this.focus - 1);
     } else if (key === 'ok' && this.stage.sound.ready) this.choose(this.tiles[this.focus]);
     else if (key === 'down') this.stage.go(this.openCheck());
   }
@@ -137,8 +124,14 @@ export class MenuScene implements Scene {
       drawCritter(ctx, { x: at.x, y: at.y, r: tile.r, color: tile.item.color, kind: 'normal', stage: tile.dwell.progress > 0 ? 2 : 0, age: this.age, touched: false }, look);
       ring(ctx, at, tile.r * 1.12, tile.dwell.progress, '#ffd600', Math.max(6, tile.r * 0.1));
       if (i === this.focus && this.tiles.length > 1) ring(ctx, at, tile.r * 1.3, 0, '#fff', 3);
-      // names shrink to their bubble's width so neighbours never overlap
-      fitLabel(ctx, t(tile.item.title), at.x, at.y + tile.r * 1.45, Math.max(24, tile.r * 0.32), tile.r * 2.1, '#fff');
+      // names shrink to their bubble's width so neighbours never overlap; a name
+      // that would cover the child's face goes above its bubble instead
+      const head = frame.body.head;
+      const half = tile.r * 1.05;
+      const below = at.y + tile.r * 1.45;
+      const nearX = Math.max(at.x - half, Math.min(at.x + half, head ? head.x : 0));
+      const overFace = !!head && Math.hypot(nearX - head.x, below - head.y) < frame.body.headRadius * 1.3 + tile.r * 0.2;
+      fitLabel(ctx, t(tile.item.title), at.x, overFace ? at.y - tile.r * 1.45 : below, Math.max(24, tile.r * 0.32), tile.r * 2.1, '#fff');
     });
     // the top of the screen belongs to the game bubbles
     label(ctx, t('menu.title'), width / 2, height * 0.83, height * 0.045, '#ffd600');

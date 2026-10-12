@@ -63,10 +63,32 @@ describe('pose matching', () => {
 
   it('reports untracked limbs as unknown, not matched', () => {
     const pts = child({ l: [-120, -115], r: [-60, -65] });
-    pts[LM.leftWrist] = null;
+    pts[LM.leftElbow] = null;
     const m = matchPose(pts, byId('arms-up'));
     expect(m.matched).toBe(false);
     expect(Object.values(m.segs)).toContain(null);
+  });
+
+  it('forgives hands raised out of the top of the picture when the arms are right', () => {
+    const pts = child({ l: [-120, -115], r: [-60, -65] });
+    pts[LM.leftWrist] = null;
+    pts[LM.rightWrist] = null;
+    expect(matchPose(pts, byId('arms-up')).matched).toBe(true);
+    // but not where the hand must turn (muscles: forearms up from flat upper arms)
+    const flex = child({ l: [180, -90], r: [0, -90] });
+    expect(matchPose(flex, byId('muscles')).matched).toBe(true);
+    flex[LM.leftWrist] = null;
+    expect(matchPose(flex, byId('muscles')).matched).toBe(false);
+  });
+
+  it('knows hands on the head, hands on hips and plain standing apart', () => {
+    const onHead = child({ l: [-125, -25], r: [-55, -155] });
+    expect(matchPose(onHead, byId('head')).matched).toBe(true);
+    expect(matchPose(onHead, byId('muscles')).matched).toBe(false);
+    const onHips = child({ l: [130, 50], r: [50, 130] });
+    expect(matchPose(onHips, byId('hips')).matched).toBe(true);
+    const relaxed = child({ l: [100, 80], r: [80, 100] });
+    expect(matchPose(relaxed, byId('hips')).matched).toBe(false);
   });
 });
 

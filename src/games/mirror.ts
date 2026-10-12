@@ -33,8 +33,10 @@ export const POSES: ReadonlyArray<Pose> = [
   { id: 'left-up', level: 1, aims: { lUpper: a(-90), lFore: a(-90), rUpper: a(90, 40), rFore: a(90, 40) } },
   { id: 'right-up', level: 1, aims: { lUpper: a(90, 40), lFore: a(90, 40), rUpper: a(-90), rFore: a(-90) } },
   { id: 'muscles', level: 2, aims: { lUpper: a(180), lFore: a(-90), rUpper: a(0), rFore: a(-90) } },
-  { id: 'hips', level: 2, aims: { lUpper: a(125), lFore: a(45, 40), rUpper: a(55), rFore: a(135, 40) } },
-  { id: 'head', level: 2, aims: { lUpper: a(-150), lFore: a(-35, 40), rUpper: a(-30), rFore: a(-145, 40) } },
+  // elbows flared out (arms hanging straight down are not "hands on hips")
+  { id: 'hips', level: 2, aims: { lUpper: a(130, 22), lFore: a(45, 40), rUpper: a(50, 22), rFore: a(135, 40) } },
+  // elbows up and out, hands meeting on top of the head
+  { id: 'head', level: 2, aims: { lUpper: a(-120, 30), lFore: a(-20, 40), rUpper: a(-60, 30), rFore: a(-160, 40) } },
   {
     id: 'star',
     level: 2,
@@ -89,6 +91,9 @@ export interface Match {
   segs: Partial<Record<Segment, boolean | null>>;
 }
 
+/** The segment before each hand or foot segment (forearm after upper arm, shin after thigh). */
+const PARENT: Partial<Record<Segment, Segment>> = { lFore: 'lUpper', rFore: 'rUpper', lShin: 'lThigh', rShin: 'rThigh' };
+
 export function matchPose(points: ReadonlyArray<Pt | null>, pose: Pose): Match {
   const joints = segmentJoints(points);
   const segs: Partial<Record<Segment, boolean | null>> = {};
@@ -103,6 +108,15 @@ export function matchPose(points: ReadonlyArray<Pt | null>, pose: Pose): Match {
     const [p, q] = ends;
     if (!p || !q || (p.x === q.x && p.y === q.y)) {
       segs[seg] = null;
+      // A hand raised (or stretched) out of the picture: if the arm is right and
+      // the hand should carry on the same way, it doesn't count against the pose.
+      const parent = PARENT[seg];
+      const parentAim = parent ? pose.aims[parent] : undefined;
+      const outOfPicture = !!p && !q && !!parent && segs[parent] === true && !!parentAim && angleDiff(parentAim.deg, aim.deg) <= 45;
+      if (outOfPicture) {
+        total += 0.75;
+        continue;
+      }
       matched = false;
       continue;
     }
@@ -137,7 +151,7 @@ export const HOLD_SEC = 1;
 export const WIN_SEC = 1.6;
 export const MISS_SEC = 1.2;
 /** A new pose needs at least this much time left in the round. */
-const MIN_POSE_SEC = 3;
+export const MIN_POSE_SEC = 3;
 
 export function mirrorStars(wins: number): number {
   return wins >= 6 ? 3 : wins >= 3 ? 2 : 1; // one star is always earned
@@ -175,7 +189,8 @@ export class MirrorGame {
     this.pose = this.nextPose();
     this.posesShown++;
     this.phase = 'pose';
-    this.phaseLeft = POSE_SEC;
+    // the last pose of the round ends with the clock
+    this.phaseLeft = Math.min(POSE_SEC, Math.max(MIN_POSE_SEC, this.remaining));
     this.hold = 0;
     this.matchedOnce = false;
     events.push({ type: 'pose', pose: this.pose });
