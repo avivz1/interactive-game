@@ -357,7 +357,7 @@ export class Creature {
   }
 }
 
-/** Stars for the results screen, from pets, jumps and peekaboos. */
+/** Stars for the results screen, from pets, jumps and peekaboos (always at least one, like Tickle Pop). */
 export function funStars(fun: number): number {
-  return fun >= 14 ? 3 : fun >= 8 ? 2 : fun >= 3 ? 1 : 0;
+  return fun >= 14 ? 3 : fun >= 6 ? 2 : 1;
 }

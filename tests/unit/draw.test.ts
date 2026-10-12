@@ -236,7 +236,7 @@ describe('creature', () => {
   });
 
   it('turns fun into stars', () => {
-    expect([0, 3, 8, 14, 40].map(funStars)).toEqual([0, 1, 2, 3, 3]);
+    expect([0, 3, 6, 14, 40].map(funStars)).toEqual([1, 1, 2, 3, 3]);
   });
 });
 
