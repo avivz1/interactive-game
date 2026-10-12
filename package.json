@@ -17,6 +17,7 @@
     "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0",
     "@mediapipe/tasks-vision": "1.0.1",
     "@upstash/redis": "1.39.0",
     "lean-qr": "2.7.4"

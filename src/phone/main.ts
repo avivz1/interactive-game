@@ -9,7 +9,7 @@ import { LANGS, apiErrorText, applyDocumentLang, emojiText, getLang, onLangChang
 import { encodePose, parseCtl } from '../shared/protocol';
 import { checkLan, waitForConnected, type SelectedPair } from '../shared/rtc';
 import { ScreenWakeLock, cameraErrorMessage, openCamera, type Facing } from './camera';
-import { MediaPipePose, SyntheticPose, type PoseSource } from './pose';
+import { MediaPipePose, SyntheticPose, syntheticDrawer, type PoseSource } from './pose';
 import { NotLocalError, Sender } from './sender';
 
 const root = document.getElementById('app') as HTMLElement;
@@ -286,7 +286,8 @@ function setTrackStatus(text: () => string): void {
 }
 
 async function startTracking(state: Live): Promise<void> {
-  const pose: PoseSource = synthetic ? new SyntheticPose() : new MediaPipePose();
+  const drawAct = new URLSearchParams(location.search).get('act') === 'draw';
+  const pose: PoseSource = synthetic ? new SyntheticPose(drawAct ? syntheticDrawer : undefined) : new MediaPipePose();
   state.pose = pose;
   let seq = 0;
   try {

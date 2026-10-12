@@ -1,5 +1,6 @@
 // Routes /api/* requests (Web-standard Request/Response) to the pairing logic.
 
+import { CREATURE_LIMITS, makeCreature, type CreatureAI } from './creature.js';
 import { hashIp } from './crypto.js';
 import { ApiError } from './errors.js';
 import { closeSession, join, pair, pollForTv, submitAnswer, type Ctx } from './pairing.js';
@@ -9,6 +10,10 @@ export interface Deps {
   store: Store | null;
   now: () => number;
   ipSalt: string;
+  /** Draw & Alive's creature AI (null when ANTHROPIC_API_KEY is not set). */
+  ai?: CreatureAI | null;
+  /** Most AI calls per day for the whole site. */
+  aiDailyCap?: number;
 }
 
 const MAX_BODY_CHARS = 64 * 1024;
@@ -67,13 +72,14 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   try {
     if (path === '/health') {
       allow(req, 'GET');
-      if (!deps.store) return json(200, { ok: false, store: 'not_configured' });
+      const ai = !!deps.ai; // only whether a key is set; no AI call is made
+      if (!deps.store) return json(200, { ok: false, store: 'not_configured', ai });
       try {
         await deps.store.set('health:probe', '1', 10); // a real write catches bad tokens and quota limits
       } catch {
-        return json(503, { ok: false, store: deps.store.kind, error: 'storage_unavailable' });
+        return json(503, { ok: false, store: deps.store.kind, ai, error: 'storage_unavailable' });
       }
-      return json(200, { ok: true, store: deps.store.kind });
+      return json(200, { ok: true, store: deps.store.kind, ai });
     }
     if (req.method === 'POST' && !/^application\/json\b/i.test(req.headers.get('content-type') ?? '')) {
       // Forces a CORS preflight for cross-site requests, which this API never answers.
@@ -87,6 +93,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (path === '/pair') {
       allow(req, 'POST');
       return json(201, await pair(ctx, await readJson(req)));
+    }
+    if (path === '/creature') {
+      allow(req, 'POST');
+      return json(200, await makeCreature(ctx, deps.ai ?? null, deps.aiDailyCap ?? CREATURE_LIMITS.dailyDefault, await readJson(req)));
     }
     if (path === '/join') {
       allow(req, 'POST');

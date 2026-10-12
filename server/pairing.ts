@@ -55,7 +55,7 @@ const keys = {
   limit: (name: string, id: string, window: number) => `rl:${name}:${id}:${window}`,
 };
 
-async function rateLimit(ctx: Ctx, name: string, id: string, max: number, windowSec: number): Promise<void> {
+export async function rateLimit(ctx: Ctx, name: string, id: string, max: number, windowSec: number): Promise<void> {
   const window = Math.floor(ctx.now() / (windowSec * 1000));
   const n = await ctx.store.incr(keys.limit(name, id, window), windowSec);
   if (n > max) {

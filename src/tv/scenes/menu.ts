@@ -94,9 +94,22 @@ export class MenuScene implements Scene {
   }
 
   onKey(key: Key): void {
-    if (key === 'left') this.focus = Math.max(0, this.focus - 1);
-    else if (key === 'right') this.focus = Math.min(this.tiles.length - 1, this.focus + 1);
-    else if (key === 'ok' && this.stage.sound.ready) this.choose(this.tiles[this.focus]);
+    if (key === 'left' || key === 'right') {
+      // move to the nearest tile on that side of the screen (tiles alternate sides)
+      const cur = this.tiles[this.focus].at;
+      let best = -1;
+      let bestD = Infinity;
+      this.tiles.forEach((tile, i) => {
+        const dx = tile.at.x - cur.x;
+        if (i === this.focus || (key === 'left' ? dx >= 0 : dx <= 0)) return;
+        const d = Math.abs(dx) + Math.abs(tile.at.y - cur.y) * 0.5;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      if (best >= 0) this.focus = best;
+    } else if (key === 'ok' && this.stage.sound.ready) this.choose(this.tiles[this.focus]);
     else if (key === 'down') this.stage.go(this.openCheck());
   }
 

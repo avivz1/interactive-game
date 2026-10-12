@@ -1,4 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { ClaudeCreatureAI } from './ai.js';
+import { CREATURE_LIMITS } from './creature.js';
 import type { Deps } from './router.js';
 import { MemoryStore, UpstashStore, type Store } from './store.js';
 
@@ -28,6 +30,8 @@ export function getDeps(): Deps {
       store: createStore(process.env),
       now: Date.now,
       ipSalt: ipSalt(process.env),
+      ai: process.env.ANTHROPIC_API_KEY ? new ClaudeCreatureAI(process.env.ANTHROPIC_API_KEY, process.env.CREATURE_MODEL || undefined) : null,
+      aiDailyCap: Number(process.env.CREATURE_DAILY_CAP) > 0 ? Number(process.env.CREATURE_DAILY_CAP) : CREATURE_LIMITS.dailyDefault,
     };
   }
   return cached;

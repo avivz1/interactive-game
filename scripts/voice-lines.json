@@ -70,6 +70,31 @@
       "en": "[excited] Great tickling! Well done!",
       "he": "[excited] איזה דגדוג מעולה! כל הכבוד!",
       "ar": "[excited] دغدغة رائعة! أحسنتم!"
+    },
+    "draw": {
+      "en": "Draw a creature in the air with your hand!",
+      "he": "ציירו יצור באוויר עם היד!",
+      "ar": "ارسموا مخلوقاً في الهواء بأيديكم!"
+    },
+    "done": {
+      "en": "Done? Put your hand on the green check mark!",
+      "he": "סיימתם? שימו יד על הסימן הירוק!",
+      "ar": "انتهيتم؟ ضعوا أيديكم على العلامة الخضراء!"
+    },
+    "alive": {
+      "en": "[excited] Abracadabra! It's alive!",
+      "he": "[excited] אברה קדברה! היצור התעורר!",
+      "ar": "[excited] أبرا كادابرا! المخلوق صار حياً!"
+    },
+    "play": {
+      "en": "Pet it! Jump, and it will jump with you!",
+      "he": "לטפו אותו! קפצו, והוא יקפוץ איתכם!",
+      "ar": "داعبوه! اقفزوا وسيقفز معكم!"
+    },
+    "bye": {
+      "en": "Bye bye! See you soon!",
+      "he": "ביי ביי! נתראה בקרוב!",
+      "ar": "باي باي! نراكم قريباً!"
     }
   }
 }

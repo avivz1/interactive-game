@@ -222,12 +222,71 @@ export function syntheticFigure(tSec: number): Landmark[] {
   return pts;
 }
 
+/**
+ * The left hand's path for `?pose=synthetic&act=draw` (seconds, x, y before
+ * mirroring): a round body, two ears and two legs, lifting the hand between
+ * strokes with quick moves in and out, like a child drawing. Loops every 16 s.
+ */
+const DRAW_SCRIPT: ReadonlyArray<readonly [number, number, number]> = (() => {
+  const rest = [0.72, 0.62] as const;
+  const keys: Array<[number, number, number]> = [[0, rest[0], rest[1]], [2, rest[0], rest[1]]];
+  // body: a loose circle
+  const start = 2.4;
+  for (let i = 0; i <= 24; i++) {
+    const a = -Math.PI / 2 + (i / 24) * Math.PI * 2 * 1.04;
+    keys.push([start + (i / 24) * 4, 0.5 + Math.cos(a) * 0.085, 0.27 + Math.sin(a) * 0.11]);
+  }
+  const strokes: Array<Array<[number, number]>> = [
+    [[0.455, 0.18], [0.44, 0.1], [0.485, 0.165]],
+    [[0.52, 0.165], [0.56, 0.1], [0.55, 0.18]],
+    [[0.47, 0.375], [0.46, 0.47]],
+    [[0.53, 0.375], [0.54, 0.47]],
+  ];
+  let t = start + 4;
+  for (const stroke of strokes) {
+    keys.push([t + 0.3, rest[0], rest[1]]); // quick move out of the board
+    t += 0.9;
+    keys.push([t, rest[0], rest[1]]);
+    t += 0.3; // quick move in
+    stroke.forEach((p, i) => keys.push([t + i * 0.6, p[0], p[1]]));
+    t += (stroke.length - 1) * 0.6;
+  }
+  keys.push([t + 0.3, rest[0], rest[1]], [16, rest[0], rest[1]]);
+  return keys;
+})();
+
+function drawScriptAt(tSec: number): [number, number] {
+  const t = tSec % 16;
+  for (let i = 1; i < DRAW_SCRIPT.length; i++) {
+    const b = DRAW_SCRIPT[i];
+    if (t <= b[0]) {
+      const a = DRAW_SCRIPT[i - 1];
+      const k = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 1;
+      return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+    }
+  }
+  const last = DRAW_SCRIPT[DRAW_SCRIPT.length - 1];
+  return [last[1], last[2]];
+}
+
+/** The synthetic figure drawing a creature with its left hand (for Draw & Alive tests). */
+export function syntheticDrawer(tSec: number): Landmark[] {
+  const pts = syntheticFigure(tSec);
+  const [x, y] = drawScriptAt(tSec);
+  // the palm is extended past the wrist along the forearm; place the wrist so the palm follows the path
+  pts[LM.leftElbow] = { x: x + 0.04, y: y + 0.135, visibility: 0.99 };
+  pts[LM.leftWrist] = { x: x + 0.0137, y: y + 0.035, visibility: 0.99 };
+  return pts;
+}
+
 export class SyntheticPose implements PoseSource {
   readonly name = 'synthetic' as const;
   readonly inferMs = 0;
   readonly model: PoseModel = 'lite';
   private timer: ReturnType<typeof setInterval> | null = null;
   private rate = new RateMeter();
+
+  constructor(private readonly figure: (tSec: number) => Landmark[] = syntheticFigure) {}
 
   get fps(): number {
     return this.rate.value;
@@ -238,7 +297,7 @@ export class SyntheticPose implements PoseSource {
     this.timer = setInterval(() => {
       this.rate.tick();
       const now = performance.now();
-      onPose(syntheticFigure((now - t0) / 1000), now);
+      onPose(this.figure((now - t0) / 1000), now);
     }, 33);
   }
 

@@ -6,7 +6,26 @@ import { getLang, onLangChange, type Lang } from '../shared/i18n';
 import { SAMPLES, type SampleDef, type SampleName } from './sounds';
 
 /** Spoken instructions, recorded per language under /voice/<lang>/<key>.mp3 (see scripts/voice-lines.json). */
-export const VOICE_KEYS = ['stand', 'head', 'close', 'feet', 'far', 'ok', 'space', 'menu', 'tickle', 'finale', 'away', 'sleepy', 'great'] as const;
+export const VOICE_KEYS = [
+  'stand',
+  'head',
+  'close',
+  'feet',
+  'far',
+  'ok',
+  'space',
+  'menu',
+  'tickle',
+  'finale',
+  'away',
+  'sleepy',
+  'great',
+  'draw',
+  'done',
+  'alive',
+  'play',
+  'bye',
+] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 
 /** Music volume while a voice line plays. */
@@ -274,6 +293,29 @@ export class Sound {
     const t = this.now;
     this.tone(880, t, 0.12, 'sine', 0.3);
     this.tone(1320, t + 0.1, 0.18, 'sine', 0.3);
+  }
+
+  /** A springy cartoon "boing" (jumps and landings). */
+  boing(): void {
+    const t = this.now;
+    const osc = this.tone(170, t, 0.32, 'triangle', 0.3, 520);
+    if (osc && this.ctx) {
+      const lfo = this.ctx.createOscillator();
+      const depth = this.ctx.createGain();
+      lfo.frequency.value = 18;
+      depth.gain.value = 60;
+      lfo.connect(depth);
+      depth.connect(osc.frequency);
+      lfo.start(t);
+      lfo.stop(t + 0.34);
+    }
+  }
+
+  /** Rising sparkles while a drawing comes alive. */
+  magic(): void {
+    const t = this.now;
+    [784, 988, 1175, 1568, 1976, 2349].forEach((f, i) => this.tone(f, t + i * 0.07, 0.3, 'sine', 0.16));
+    this.noise(t, 0.9, 'bandpass', 3000, 0.08, 9000);
   }
 
   cheer(): void {

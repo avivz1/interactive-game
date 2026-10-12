@@ -140,12 +140,12 @@ describe('authorization and validation', () => {
 
   it('supports the Vercel rewrite form (?route=)', async () => {
     const res = await call('/api/main?route=health');
-    expect(res.json).toEqual({ ok: true, store: 'memory' });
+    expect(res.json).toEqual({ ok: true, store: 'memory', ai: false });
   });
 
   it('reports missing storage instead of failing silently', async () => {
     deps = { ...deps, store: null };
-    expect((await call('/api/health')).json).toEqual({ ok: false, store: 'not_configured' });
+    expect((await call('/api/health')).json).toEqual({ ok: false, store: 'not_configured', ai: false });
     expect((await call('/api/pair', { method: 'POST', body: { offer: OFFER } })).status).toBe(503);
   });
 });
