@@ -7,6 +7,7 @@
 import type { Pt } from '../../shared/body';
 import { Creature, funStars, type CreatureEvent } from '../../games/creature';
 import { Dwell } from '../../games/dwell';
+import { Limbs, type Touchers } from '../../games/limbs';
 import { buildShape, fromImage, MIN_INK, Sheet, type Box, type ImageFit, type Shape } from '../../games/drawing';
 import { DRAWING_IMAGE_SIZE, PERSONALITIES, type CreatureTraits } from '../../shared/creature-api';
 import { getLang, t } from '../../shared/i18n';
@@ -150,6 +151,8 @@ export class DrawScene implements Scene {
   private lastPetAt = -10;
   /** The child's size for the creature: steady when they turn sideways (shoulders look narrow). */
   private playUnit = 0;
+  private readonly limbs = new Limbs();
+  private touchers: Touchers = { hands: [null, null], feet: [null, null] };
   private strokeColors: number[] = [];
 
   // end
@@ -475,7 +478,12 @@ export class DrawScene implements Scene {
     // width (slowly letting go), so the creature doesn't shrink and grow.
     if (ls && rs) this.playUnit = this.playUnit ? Math.max(body.shoulderWidth, this.playUnit * (1 - 0.08 * dt)) : body.shoulderWidth;
     const unit = this.playUnit || body.shoulderWidth;
-    const events = c.update(dt, { left: rect.x, right: rect.x + rect.w, top: rect.y, ground: this.ground, unit }, { hands: body.hands, head: body.head, center, feet: lower || null });
+    this.touchers = this.limbs.update(body, dt);
+    const events = c.update(
+      dt,
+      { left: rect.x, right: rect.x + rect.w, top: rect.y, ground: this.ground, unit },
+      { hands: body.hands, head: body.head, center, feet: lower || null, touchHands: this.touchers.hands, kicks: this.touchers.feet },
+    );
     for (const e of events) this.react(e, unit);
   }
 
@@ -627,6 +635,7 @@ export class DrawScene implements Scene {
     if (!c || !shape || !traits) return;
     const unit = body.shoulderWidth;
     const lookAt = body.hands[0] || body.hands[1] || body.head;
+    for (const f of this.touchers.feet) if (f) drawGlove(ctx, f, Math.max(14, unit * 0.32));
     // soft shadow under walkers
     if (!c.flies && this.ground !== null) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';

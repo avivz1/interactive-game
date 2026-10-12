@@ -11,8 +11,9 @@ or 6-digit code), the child sees themselves mirrored on the TV with glowing
 2. **Menu** — raise a hand onto a game bubble and hold it (or press OK).
    Remote ▼ opens the **TV check** screen (connection and tracking details).
 3. **Tickle Pop** — hold a hand on the bubble-creatures to tickle them until
-   they pop. Sneezy ones pop their neighbours; sleepy ones wake up with a head
-   boop. 60-second rounds, always at least one star.
+   they pop (a lifted foot works too). Sneezy ones pop their neighbours; sleepy
+   ones nap near the floor until a kick or a hand wakes them. Only hands and
+   feet count, never the head or body. 60-second rounds, always at least one star.
 4. **Draw & Alive** — draw a creature in the air: a hand inside the board is
    the pen (lower it to lift the pen). Hold a hand on the green ✓ to finish
    (remote: OK; ◀ starts over), 25 seconds. The drawing comes alive — filled

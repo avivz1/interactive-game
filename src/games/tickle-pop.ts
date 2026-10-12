@@ -1,7 +1,8 @@
 // Tickle Pop rules (no drawing here, so it can be tested):
-// bubble-creatures float up near the child; keeping a hand on one tickles it,
-// it giggles louder through 3 stages and pops into confetti. Nothing is ever
-// "lost" — bubbles that are not tickled simply float away.
+// bubble-creatures float up near the child; keeping a hand (or a lifted foot)
+// on one tickles it, it giggles louder through 3 stages and pops into confetti.
+// Sleepy bubbles nap low, near the feet, until a kick or a hand wakes them.
+// Nothing is ever "lost" — bubbles that are not tickled simply float away.
 
 import type { Pt } from '../shared/body';
 import { mulberry32 } from './rng';
@@ -28,16 +29,17 @@ export interface Bubble {
 
 export type GameEvent =
   | { type: 'giggle'; bubble: Bubble; stage: number }
-  | { type: 'pop'; bubble: Bubble; cause: 'hand' | 'head' | 'sneeze' }
+  | { type: 'pop'; bubble: Bubble; cause: 'touch' | 'sneeze' }
   | { type: 'escape'; bubble: Bubble }
   | { type: 'finale' }
   | { type: 'end'; popped: number; stars: number };
 
+/** What can tickle: reaching hands and lifted feet (never the head or body). */
 export interface Hits {
   hands: Pt[];
-  head: Pt | null;
+  feet: Pt[];
   handRadius: number;
-  headRadius: number;
+  footRadius: number;
 }
 
 /** Where bubbles may appear: around the child, inside arm's reach. */
@@ -61,6 +63,8 @@ export interface TickleConfig {
 export const DEFAULT_CONFIG: TickleConfig = { durationSec: 60, tickleSec: 0.45, seed: 1 };
 export const COLORS = 5;
 const FINALE_SEC = 8;
+/** Sleepy bubbles nap this long near the feet before floating on. */
+const NAP_SEC = 9;
 
 export function starsFor(popped: number): number {
   return popped >= 20 ? 3 : popped >= 10 ? 2 : 1; // one star is always earned
@@ -102,7 +106,12 @@ export class TicklePop {
     const riseSpeed = (env.bottom - env.top) / (this.ended ? 2.5 : 7); // px per second
     for (const b of this.bubbles) {
       b.age += dt;
-      b.y -= riseSpeed * dt * (b.kind === 'sleepy' ? 0.7 : 1);
+      const napY = env.bottom - env.unit * 1.2;
+      if (b.kind === 'sleepy' && !this.ended && b.age < NAP_SEC && b.y <= napY) {
+        b.y = napY + Math.sin(b.age * 1.3 + b.phase) * env.unit * 0.08; // snoozing at shin height
+      } else {
+        b.y -= riseSpeed * dt * (b.kind === 'sleepy' ? 0.7 : 1);
+      }
       b.x = b.baseX + Math.sin(b.age * 1.6 + b.phase) * env.unit * 0.15;
       b.touched = !this.ended && this.isTouched(b, hits);
       if (b.touched) b.tickle = Math.min(1, b.tickle + dt / this.config.tickleSec);
@@ -113,7 +122,7 @@ export class TicklePop {
     }
 
     for (const b of this.bubbles.slice()) {
-      if (b.tickle >= 1 && this.bubbles.indexOf(b) >= 0) this.pop(b, b.kind === 'sleepy' ? 'head' : 'hand', events);
+      if (b.tickle >= 1 && this.bubbles.indexOf(b) >= 0) this.pop(b, 'touch', events);
     }
     for (const b of this.bubbles.slice()) {
       if (b.y + b.r < env.top - b.r) {
@@ -136,12 +145,12 @@ export class TicklePop {
       const reach = radius + b.r * 0.9;
       return dx * dx + dy * dy <= reach * reach;
     };
-    if (b.kind === 'sleepy') return !!hits.head && near(hits.head, hits.headRadius);
     for (const hand of hits.hands) if (near(hand, hits.handRadius)) return true;
+    for (const foot of hits.feet) if (near(foot, hits.footRadius)) return true;
     return false;
   }
 
-  private pop(b: Bubble, cause: 'hand' | 'head' | 'sneeze', events: GameEvent[]): void {
+  private pop(b: Bubble, cause: 'touch' | 'sneeze', events: GameEvent[]): void {
     this.remove(b);
     this.popped++;
     events.push({ type: 'pop', bubble: b, cause });

@@ -26,6 +26,10 @@ export const LM = {
   rightKnee: 26,
   leftAnkle: 27,
   rightAnkle: 28,
+  leftHeel: 29,
+  rightHeel: 30,
+  leftFootIndex: 31,
+  rightFootIndex: 32,
 } as const;
 
 /** Body segments drawn on the TV (face detail omitted on purpose). */

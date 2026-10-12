@@ -24,6 +24,13 @@ export interface Kid {
   center: Pt | null;
   /** The lower ankle (feet leave the floor in a real jump, not when standing up). */
   feet?: Pt | null;
+  /**
+   * The hands that may pet (per hand; null when hanging at the side). Defaults
+   * to all hands. Head and body never pet.
+   */
+  touchHands?: ReadonlyArray<Pt | null>;
+  /** Lifted feet: a kick touches too. */
+  kicks?: ReadonlyArray<Pt | null>;
 }
 
 export type Mood = 'arrive' | 'roam' | 'follow' | 'happy' | 'hide' | 'sleep';
@@ -157,14 +164,18 @@ export class Creature {
     }
     this.watchKid(dt, arena, kid, hands, events);
 
-    // Touches: a moving hand on the body (a hand that just rests there doesn't count).
+    // Touches: a moving, reaching hand or a kick (a hand that just rests there,
+    // the head and the body don't count).
     const mid = this.middle;
     const reach = this.reach;
+    const on = (p: Pt) => Math.abs(p.x - mid.x) < reach.x && Math.abs(p.y - mid.y) < reach.y;
+    const petters = kid.touchHands || kid.hands;
     let touching = false;
     for (let i = 0; i < 2; i++) {
-      const h = kid.hands[i];
-      if (h && this.handSpeed[i] > arena.unit * 0.8 && Math.abs(h.x - mid.x) < reach.x && Math.abs(h.y - mid.y) < reach.y) touching = true;
+      const h = petters[i];
+      if (h && this.handSpeed[i] > arena.unit * 0.8 && on(h)) touching = true;
     }
+    for (const f of kid.kicks || []) if (f && on(f)) touching = true;
     touching = touching && this.mood !== 'hide';
     if (touching && this.touchCooldown === 0 && this.mood !== 'arrive') {
       this.touchCooldown = TOUCH_COOLDOWN;

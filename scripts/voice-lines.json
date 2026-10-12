@@ -62,9 +62,9 @@
       "ar": "إلى أين ذهبتم؟ [curious] عودوا!"
     },
     "sleepy": {
-      "en": "[whispers] A sleepy bubble... [excited] Wake it up with your head!",
-      "he": "[whispers] בועה ישנונית... [excited] העירו אותה עם הראש!",
-      "ar": "[whispers] فقاعة نعسانة... [excited] أيقظوها برؤوسكم!"
+      "en": "[whispers] A sleepy bubble... [excited] Kick it or touch it!",
+      "he": "[whispers] בועה ישנונית... [excited] בעטו בה או געו בה!",
+      "ar": "[whispers] فقاعة نعسانة... [excited] اركلوها أو المسوها!"
     },
     "great": {
       "en": "[excited] Great tickling! Well done!",

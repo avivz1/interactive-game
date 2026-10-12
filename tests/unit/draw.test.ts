@@ -246,6 +246,17 @@ describe('creature', () => {
     expect(c.fun).toBeGreaterThanOrEqual(2);
   });
 
+  it('a kick pets it; a hand hanging at the side does not', () => {
+    const c = new Creature('bouncy', 'walk', { x: 900, y: ARENA.ground }, 225, 9);
+    run(c, 1.5, standing);
+    const at = () => c.middle;
+    // a swinging hand that hangs at the side (not a toucher)
+    const hanging = run(c, 1.5, (t) => ({ hands: [{ x: at().x + Math.sin(t * 12) * 30, y: at().y }, null], touchHands: [null, null], head: { x: 640, y: 120 }, center: KID_CENTER }), 1.5);
+    expect(hanging.filter((e) => e.type === 'touch')).toHaveLength(0);
+    const kicked = run(c, 1, () => ({ hands: [null, null], kicks: [at(), null], head: { x: 640, y: 120 }, center: KID_CENTER }), 3);
+    expect(kicked.some((e) => e.type === 'touch')).toBe(true);
+  });
+
   it('jumps when the child jumps', () => {
     const c = new Creature('bouncy', 'walk', { x: 400, y: ARENA.ground }, 225, 3);
     run(c, 2, standing);

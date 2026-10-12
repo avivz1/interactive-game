@@ -1,5 +1,7 @@
-// Menu: games float above the child's head; raise a hand onto one and hold
-// to start it (or use the remote).
+// Menu: games float in an arc above the child's head, where raised hands reach
+// (measured from the shoulders); raise a hand onto one and hold to start it
+// (or use the remote). Too close to the top of the picture, they move to the
+// sides instead.
 
 import type { Pt } from '../../shared/body';
 import { Dwell } from '../../games/dwell';
@@ -8,6 +10,7 @@ import { drawCritter } from '../critters';
 import { drawBody } from '../draw';
 import type { Frame, Key, Scene, Stage } from '../stage';
 import { distance, label, ring } from '../ui';
+import type { Rect } from '../../shared/mapping';
 
 export interface MenuItem {
   id: string;
@@ -67,20 +70,14 @@ export class MenuScene implements Scene {
     }
     const { rect, body } = frame;
     const s = body.shoulderWidth;
-    const r = Math.max(s * 0.75, rect.h * 0.09);
-    // Tiles sit beside the child at raised-hand height (inside arm's reach),
-    // alternating right and left, never over the face.
     const ls = body.points[11];
     const rs = body.points[12];
     const cx = ls && rs ? (ls.x + rs.x) / 2 : body.head ? body.head.x : rect.x + rect.w / 2;
     const shoulderY = ls && rs ? (ls.y + rs.y) / 2 : rect.y + rect.h * 0.35;
+    const targets = menuLayout(this.tiles.length, cx, shoulderY, s, rect);
+    const r = targets.r;
     this.tiles.forEach((t, i) => {
-      const side = i % 2 === 0 ? 1 : -1;
-      const row = Math.floor(i / 2);
-      const target = {
-        x: Math.max(rect.x + r * 1.2, Math.min(rect.x + rect.w - r * 1.2, cx + side * (s * 1.4 + r))),
-        y: Math.max(rect.y + r * 1.2, Math.min(rect.y + rect.h - r * 1.8, shoulderY - s * 0.7 + row * r * 2.6)),
-      };
+      const target = targets.at[i];
       if (t.r === 0) {
         t.at = target;
         t.r = r;
@@ -88,7 +85,7 @@ export class MenuScene implements Scene {
         t.at = { x: t.at.x + (target.x - t.at.x) * 0.08, y: t.at.y + (target.y - t.at.y) * 0.08 };
         t.r += (r - t.r) * 0.08;
       }
-      const hover = body.hands.some((hand) => !!hand && distance(hand, t.at) <= t.r + s * 0.3);
+      const hover = body.hands.some((hand) => !!hand && distance(hand, t.at) <= t.r + s * 0.2);
       if (t.dwell.update(hover, frame.dt * 1000)) this.choose(t);
     });
   }
@@ -125,8 +122,40 @@ export class MenuScene implements Scene {
       if (i === this.focus && this.tiles.length > 1) ring(ctx, at, tile.r * 1.3, 0, '#fff', 3);
       label(ctx, t(tile.item.title), at.x, at.y + tile.r * 1.45, Math.max(24, tile.r * 0.32), '#fff');
     });
-    label(ctx, t('menu.title'), width / 2, height * 0.06, height * 0.045, '#ffd600');
-    label(ctx, t('menu.remote'), width / 2, height * 0.95, height * 0.028, 'rgba(255,255,255,0.8)');
-    if (!this.stage.sound.ready) label(ctx, t('hint.sound'), width / 2, height * 0.89, height * 0.032, '#ffd600');
+    // the top of the screen belongs to the game bubbles
+    label(ctx, t('menu.title'), width / 2, height * 0.83, height * 0.045, '#ffd600');
+    if (!this.stage.sound.ready) label(ctx, t('hint.sound'), width / 2, height * 0.9, height * 0.032, '#ffd600');
+    label(ctx, t('menu.remote'), width / 2, height * 0.96, height * 0.028, 'rgba(255,255,255,0.8)');
   }
+}
+
+/**
+ * Where the game bubbles go: an arc above the head at raised-hand reach
+ * (about 1.65 shoulder widths from the shoulders), 62° apart, first game on the
+ * right. With little room above the head they stay as high as the picture
+ * allows and move outward just enough to keep clear of the head.
+ */
+export function menuLayout(n: number, cx: number, shoulderY: number, s: number, rect: Rect): { r: number; at: Pt[] } {
+  const r = Math.max(s * 0.5, rect.h * 0.065);
+  const reach = s * 1.65;
+  const step = (62 * Math.PI) / 180;
+  const top = rect.y + r * 1.1;
+  // the head: about 0.75 s above the shoulders, radius about 0.45 s
+  const headY = shoulderY - s * 0.75;
+  const clear = r + s * 0.55;
+  const at: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((n - 1) / 2 - i) * step;
+    const side = a > 0 ? 1 : a < 0 ? -1 : i % 2 === 0 ? 1 : -1;
+    let x = cx + Math.sin(a) * reach;
+    const y = Math.max(top, shoulderY - Math.cos(a) * reach);
+    // pushed down next to the head: move outward so it never covers the face
+    const dy = Math.abs(y - headY);
+    if (dy < clear) {
+      const minDx = Math.sqrt(clear * clear - dy * dy);
+      if (Math.abs(x - cx) < minDx) x = cx + side * minDx;
+    }
+    at.push({ x: Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, x)), y });
+  }
+  return { r, at };
 }

@@ -6,7 +6,7 @@ import { TicklePop, starsFor, type Envelope, type GameEvent, type Hits } from '.
 import type { Landmark } from '../../src/shared/landmarks';
 
 const env: Envelope = { centerX: 640, unit: 120, left: 0, right: 1280, top: 0, bottom: 720 };
-const noHits: Hits = { hands: [], head: null, handRadius: 40, headRadius: 50 };
+const noHits: Hits = { hands: [], feet: [], handRadius: 40, footRadius: 40 };
 
 function run(game: TicklePop, seconds: number, hits: (g: TicklePop) => Hits = () => noHits): GameEvent[] {
   const events: GameEvent[] = [];
@@ -40,14 +40,25 @@ describe('TicklePop', () => {
     expect(game.popped).toBeGreaterThanOrEqual(1);
   });
 
-  it('sleepy bubbles ignore hands and wake for the head', () => {
+  it('sleepy bubbles nap near the feet and wake with a kick (or a hand)', () => {
     const game = new TicklePop({ durationSec: 60, tickleSec: 0.3, seed: 1 });
-    game.bubbles.push({ id: 999, kind: 'sleepy', x: 600, y: 400, baseX: 600, r: 50, color: 0, tickle: 0, stage: 0, age: 0, phase: 0, touched: false });
-    const handsOnly = game.update(0.5, env, { ...noHits, hands: [{ x: 600, y: 400 }] });
-    expect(handsOnly.some((e) => e.type === 'pop' && e.bubble.id === 999)).toBe(false);
+    game.bubbles.push({ id: 999, kind: 'sleepy', x: 600, y: env.bottom + 50, baseX: 600, r: 50, color: 0, tickle: 0, stage: 0, age: 0, phase: 0, touched: false });
+    run(game, 4);
     const b = game.bubbles.find((x) => x.id === 999)!;
-    const withHead = game.update(0.5, env, { ...noHits, head: { x: b.x, y: b.y } });
-    expect(withHead.some((e) => e.type === 'pop' && e.bubble.id === 999 && e.cause === 'head')).toBe(true);
+    // still napping at shin height, not floating away
+    expect(b.y).toBeGreaterThan(env.bottom - env.unit * 1.5);
+    const kicked = run(game, 0.6, (g) => {
+      const n = g.bubbles.find((x) => x.id === 999);
+      return { ...noHits, feet: n ? [{ x: n.x, y: n.y }] : [] };
+    });
+    expect(kicked.some((e) => e.type === 'pop' && e.bubble.id === 999 && e.cause === 'touch')).toBe(true);
+
+    game.bubbles.push({ id: 1000, kind: 'sleepy', x: 300, y: 500, baseX: 300, r: 50, color: 0, tickle: 0, stage: 0, age: 0, phase: 0, touched: false });
+    const byHand = run(game, 0.6, (g) => {
+      const n = g.bubbles.find((x) => x.id === 1000);
+      return { ...noHits, hands: n ? [{ x: n.x, y: n.y }] : [] };
+    });
+    expect(byHand.some((e) => e.type === 'pop' && e.bubble.id === 1000)).toBe(true);
   });
 
   it('sneezy bubbles pop their neighbours', () => {
@@ -123,6 +134,37 @@ describe('mulberry32', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThan(1);
       expect(v).toBe(r2());
+    }
+  });
+});
+
+describe('menu layout', () => {
+  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+  it('puts the game bubbles in an arc above the head, within raised-hand reach', async () => {
+    const { menuLayout } = await import('../../src/tv/scenes/menu');
+    const s = 150;
+    const shoulderY = 500;
+    const { r, at } = menuLayout(2, 960, shoulderY, s, rect);
+    expect(at).toHaveLength(2);
+    for (const p of at) {
+      // above the head (head top is about one shoulder width above the shoulders)
+      expect(p.y + r).toBeLessThanOrEqual(shoulderY - s * 0.85);
+      // reachable: about 1.65 shoulder widths from the shoulders
+      expect(Math.hypot(p.x - 960, p.y - shoulderY)).toBeLessThanOrEqual(s * 1.7);
+    }
+    expect(at[0].x).toBeGreaterThan(960); // first game on the right
+    expect(at[1].x).toBeLessThan(960);
+  });
+
+  it('with little room above the head, stays high and clear of the face', async () => {
+    const { menuLayout } = await import('../../src/tv/scenes/menu');
+    const s = 150;
+    const shoulderY = 180;
+    const { r, at } = menuLayout(2, 960, shoulderY, s, rect);
+    for (const p of at) {
+      expect(p.y - r).toBeGreaterThanOrEqual(0); // inside the picture
+      expect(p.y).toBeLessThan(shoulderY - s * 0.4); // still up high, not beside the body
+      expect(Math.hypot(p.x - 960, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(s * 0.55 + r - 1); // not over the face
     }
   });
 });

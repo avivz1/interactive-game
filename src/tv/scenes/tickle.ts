@@ -1,10 +1,11 @@
-// Tickle Pop: hold a hand on a bubble-creature to tickle it until it pops.
+// Tickle Pop: hold a hand (or a lifted foot) on a bubble-creature to tickle it
+// until it pops. Sleepy bubbles nap near the floor: kick them awake.
 
-import type { Pt } from '../../shared/body';
+import { Limbs, present, type Touchers } from '../../games/limbs';
 import { TicklePop, type Envelope, type GameEvent } from '../../games/tickle-pop';
 import { t, type TextKey } from '../../shared/i18n';
 import { drawCritter } from '../critters';
-import { drawBody } from '../draw';
+import { drawBody, drawGlove } from '../draw';
 import { Effects } from '../effects';
 import type { Frame, Key, Scene, Stage } from '../stage';
 import { label, panel, ring } from '../ui';
@@ -45,7 +46,9 @@ export class TickleScene implements Scene {
     this.game = new TicklePop({ durationSec: roundSec, tickleSec: 0.45, seed: Math.floor(Math.random() * 1e9) });
   }
 
+  private readonly limbs = new Limbs();
   private sleepyAnnounced = false;
+  private touchers: Touchers = { hands: [null, null], feet: [null, null] };
   private awaySpokenAt = -100;
   private clock = 0;
 
@@ -96,11 +99,18 @@ export class TickleScene implements Scene {
     const rs = frame.body.points[12];
     const centerX = ls && rs ? (ls.x + rs.x) / 2 : body.head ? body.head.x : rect.x + rect.w / 2;
     const env: Envelope = { centerX, unit, left: rect.x, right: rect.x + rect.w, top: rect.y, bottom: rect.y + rect.h };
-    const hands = body.hands.filter((p): p is Pt => !!p);
-    const events = this.game.update(dt, env, { hands, head: body.head, handRadius: unit * 0.38, headRadius: body.headRadius });
+    // Only reaching hands and lifted feet tickle (never the head, the body, or
+    // a hand hanging at the side).
+    this.touchers = this.limbs.update(body, dt);
+    const events = this.game.update(dt, env, {
+      hands: present(this.touchers.hands),
+      feet: present(this.touchers.feet),
+      handRadius: unit * 0.28,
+      footRadius: unit * 0.3,
+    });
     for (const e of events) this.react(e, unit);
-    // Explain sleepy bubbles the first time one floats into view.
-    if (!this.sleepyAnnounced && this.game.bubbles.some((b) => b.kind === 'sleepy' && b.y < rect.y + rect.h * 0.85)) {
+    // Explain sleepy bubbles the first time one settles down for a nap.
+    if (!this.sleepyAnnounced && this.game.bubbles.some((b) => b.kind === 'sleepy' && b.y < rect.y + rect.h - unit)) {
       this.sleepyAnnounced = true;
       this.stage.sound.speak('sleepy', 0);
     }
@@ -152,6 +162,8 @@ export class TickleScene implements Scene {
     for (const b of this.game.bubbles) drawCritter(ctx, b, lookAt);
     this.effects.render(ctx, width);
     drawBody(ctx, body, 0.25);
+    // a lifted foot glows like the hands: it can kick bubbles now
+    for (const f of this.touchers.feet) if (f) drawGlove(ctx, f, Math.max(14, body.shoulderWidth * 0.32));
 
     // HUD: popped counter and time left
     const hud = height * 0.075;

@@ -180,13 +180,16 @@ const DRAWING_PHONE = '/phone/?pose=synthetic&act=draw';
 
 /** Opens Draw & Alive from the menu with the remote (◀ to its tile, left of the child, then OK). */
 async function openDrawGame(tv: Page): Promise<void> {
-  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
-  await tv.waitForTimeout(300); // tiles settle beside the child
-  await tv.keyboard.press('ArrowLeft');
+  // the drawing figure's hand may already have picked it from the menu
+  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toMatch(/^(menu|draw-alive)$/);
+  if ((await debugValue(tv, 'scene')) === 'menu') {
+    await tv.waitForTimeout(300); // tiles settle above the child
+    await tv.keyboard.press('ArrowLeft');
+  }
   await expect
     .poll(
       async () => {
-        await tv.keyboard.press('Enter');
+        if ((await debugValue(tv, 'scene')) === 'menu') await tv.keyboard.press('Enter');
         return debugValue(tv, 'scene');
       },
       { timeout: 10_000, intervals: [500] },

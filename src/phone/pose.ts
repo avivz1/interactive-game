@@ -209,8 +209,9 @@ export function syntheticFigure(tSec: number): Landmark[] {
   set(LM.rightEar, 0.47 + sway, 0.19);
   set(LM.leftShoulder, 0.58 + sway, 0.33);
   set(LM.rightShoulder, 0.42 + sway, 0.33);
-  set(LM.leftElbow, 0.66 + sway, 0.27 - wave * 0.05);
-  set(LM.leftWrist, 0.7 + sway, 0.15 - wave * 0.08);
+  // waving out to the side at chest height (below the menu's game bubbles)
+  set(LM.leftElbow, 0.68 + sway, 0.36 - wave * 0.03);
+  set(LM.leftWrist, 0.76 + sway, 0.36 - wave * 0.08);
   set(LM.rightElbow, 0.35 + sway, 0.43);
   set(LM.rightWrist, 0.33 + sway, 0.55 + wave * 0.03);
   set(LM.leftHip, 0.55, 0.6);
