@@ -69,12 +69,19 @@ export class Sound {
     const src = ctx.createBufferSource();
     src.buffer = take.buffer;
     const gain = ctx.createGain();
-    gain.gain.value = take.def.gain !== undefined ? take.def.gain : 1;
+    const level = take.def.gain !== undefined ? take.def.gain : 1;
     src.connect(gain);
     gain.connect(this.master);
     const start = take.def.start || 0;
     const end = take.def.end !== undefined ? Math.min(take.def.end, take.buffer.duration) : take.buffer.duration;
-    src.start(ctx.currentTime + 0.005, start, Math.max(0.05, end - start));
+    const length = Math.max(0.05, end - start);
+    const at = ctx.currentTime + 0.005;
+    // short fade-out so trimmed takes end without a click
+    const fade = Math.min(0.06, length / 3);
+    gain.gain.setValueAtTime(level, at);
+    gain.gain.setValueAtTime(level, at + length - fade);
+    gain.gain.linearRampToValueAtTime(0, at + length);
+    src.start(at, start, length);
     if (voice) {
       this.voices++;
       src.onended = () => {
