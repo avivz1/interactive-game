@@ -1,0 +1,75 @@
+{
+  "model": "eleven_v4",
+  "voices": {
+    "he": { "id": "UZzDIQRRTW2Id7YBcbgC", "name": "Maya - Cheerful, Friendly Creator" },
+    "ar": { "id": "dtZya8QgrkOnEbmiQOmI", "name": "Samir - Modern Arabic (Jordanian)" },
+    "en": { "id": "aqLKRpwa1nsQ5MqiAh53", "name": "Sugar Lin - Warm-Playful English" }
+  },
+  "lines": {
+    "stand": {
+      "en": "[excited] Stand in front of the camera!",
+      "he": "[excited] עמדו מול המצלמה!",
+      "ar": "[excited] قفوا أمام الكاميرا!"
+    },
+    "head": {
+      "en": "Take a small step back, so I can see your head!",
+      "he": "קחו צעד קטן אחורה, כדי שאראה את הראש!",
+      "ar": "ارجعوا خطوة صغيرة إلى الوراء، حتى أرى رؤوسكم!"
+    },
+    "close": {
+      "en": "Take a step back, so I can see your tummy and legs!",
+      "he": "קחו צעד אחורה, כדי שאראה את הבטן ואת הרגליים!",
+      "ar": "ارجعوا خطوة إلى الوراء، حتى أرى البطن والأرجل!"
+    },
+    "feet": {
+      "en": "One more little step back... I can't see your feet!",
+      "he": "עוד צעד קטן אחורה... אני לא רואה את כפות הרגליים!",
+      "ar": "خطوة صغيرة أخرى إلى الوراء... لا أرى أقدامكم!"
+    },
+    "far": {
+      "en": "Come a little closer!",
+      "he": "התקרבו קצת!",
+      "ar": "اقتربوا قليلاً!"
+    },
+    "ok": {
+      "en": "[excited] Perfect! Stay right there!",
+      "he": "[excited] מושלם! הישארו בדיוק שם!",
+      "ar": "[excited] ممتاز! ابقوا هناك تماماً!"
+    },
+    "space": {
+      "en": "Make some room around you, so you can move freely!",
+      "he": "פנו מקום מסביבכם, כדי שתוכלו לזוז בחופשיות!",
+      "ar": "أفسحوا مكاناً حولكم، حتى تتحركوا بحرية!"
+    },
+    "menu": {
+      "en": "[excited] Raise your hand to a game to play!",
+      "he": "[excited] הרימו יד אל משחק כדי לשחק!",
+      "ar": "[excited] ارفعوا أيديكم نحو لعبة لتلعبوا!"
+    },
+    "tickle": {
+      "en": "[excited] Tickle the bubbles! Hold your hand on a bubble until it pops!",
+      "he": "[excited] דגדגו את הבועות! החזיקו את היד על בועה עד שהיא מתפוצצת!",
+      "ar": "[excited] دغدغوا الفقاعات! ضعوا أيديكم على الفقاعة حتى تنفجر!"
+    },
+    "finale": {
+      "en": "[excited] Giggle storm! Pop as many as you can!",
+      "he": "[excited] סערת צחקוקים! פוצצו כמה שיותר!",
+      "ar": "[excited] عاصفة الضحك! فرقعوا أكبر عدد ممكن!"
+    },
+    "away": {
+      "en": "Where did you go? [curious] Come back!",
+      "he": "לאן נעלמתם? [curious] חזרו!",
+      "ar": "إلى أين ذهبتم؟ [curious] عودوا!"
+    },
+    "sleepy": {
+      "en": "[whispers] A sleepy bubble... [excited] Wake it up with your head!",
+      "he": "[whispers] בועה ישנונית... [excited] העירו אותה עם הראש!",
+      "ar": "[whispers] فقاعة نعسانة... [excited] أيقظوها برؤوسكم!"
+    },
+    "great": {
+      "en": "[excited] Great tickling! Well done!",
+      "he": "[excited] איזה דגדוג מעולה! כל הכבוד!",
+      "ar": "[excited] دغدغة رائعة! أحسنتم!"
+    }
+  }
+}

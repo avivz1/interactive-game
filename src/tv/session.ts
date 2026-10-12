@@ -4,6 +4,7 @@
 
 import { buildBody, type Body } from '../shared/body';
 import { ClockSync } from '../shared/clock';
+import { setLang } from '../shared/i18n';
 import { PoseSmoother } from '../shared/filter';
 import type { Landmark } from '../shared/landmarks';
 import type { Rect } from '../shared/mapping';
@@ -157,6 +158,7 @@ export class LiveSession {
         this.stats.phoneInferMs = msg.inferMs;
         if (msg.model) this.stats.phoneModel = msg.model;
       } else if (msg.t === 'hello') this.stats.phoneSource = msg.source;
+      else if (msg.t === 'lang') setLang(msg.lang);
       else if (msg.t === 'bye') {
         rx.byeSeen = true;
         this.end('stopped');

@@ -2,9 +2,10 @@
 // over WebRTC and starts the live view.
 
 import { generate } from 'lean-qr';
-import { emojiText, formatCode, type PairResponse, type TvPollResponse } from '../shared/api';
+import { formatCode, type PairResponse, type TvPollResponse } from '../shared/api';
 import { h, mount } from '../shared/dom';
 import { HttpError, apiFetch, sleep } from '../shared/http';
+import { LANGS, applyDocumentLang, emojiText, getLang, onLangChange, setLang, t, type TextKey } from '../shared/i18n';
 import { checkLan, waitForConnected } from '../shared/rtc';
 import { browserInfo, hasWebRtc, offerLooksValid, runChecks, type Check } from './checks';
 import { Sound } from './audio';
@@ -24,6 +25,7 @@ declare global {
 }
 
 window.__tvStarted = true;
+applyDocumentLang();
 
 const root = document.getElementById('app') as HTMLElement;
 const browser = browserInfo();
@@ -43,15 +45,33 @@ let receiver: Receiver | null = null;
 let disposeLive: (() => void) | null = null;
 let onOk: (() => void) | null = null;
 
+/** The pairing screen currently shown (re-rendered when the language changes). */
+let pairingView: { session: PairResponse; qrUrl: string; statusKey: TextKey; joined: boolean } | null = null;
+
+function cycleLang(step: number): void {
+  const i = LANGS.findIndex((l) => l.id === getLang());
+  setLang(LANGS[(i + step + LANGS.length) % LANGS.length].id);
+}
+
 document.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.keyCode === 13) && onOk) {
     e.preventDefault();
     onOk();
+  } else if (pairingView && (e.keyCode === 37 || e.keyCode === 39 || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    // Hebrew and Arabic read right-to-left, so ◀ moves forward there.
+    const right = e.keyCode === 39 || e.key === 'ArrowRight';
+    cycleLang(right ? 1 : -1);
   }
+});
+
+onLangChange(() => {
+  if (pairingView) renderPairing();
 });
 
 function cleanup(): void {
   onOk = null;
+  pairingView = null;
   if (disposeLive) disposeLive();
   disposeLive = null;
   if (receiver) receiver.close();
@@ -71,6 +91,7 @@ function checksRow(list: Check[]): HTMLElement {
 }
 
 function showMessage(title: string, body: string, opts: { action?: string; onAction?: () => void; details?: boolean } = {}): void {
+  pairingView = null;
   const button = opts.action
     ? h('button', { class: 'btn', testid: 'action', text: opts.action, on: { click: () => opts.onAction && opts.onAction() } })
     : null;
@@ -90,48 +111,75 @@ function showMessage(title: string, body: string, opts: { action?: string; onAct
 
 function showUnsupported(reason: string): void {
   cleanup();
-  showMessage(
-    '😕 This TV browser can’t receive the phone camera',
-    reason + ' The games need live video from the phone (WebRTC). Please send us the checks below.',
-    { details: true, action: 'Try again', onAction: () => location.reload() },
+  showMessage(t('tv.unsupported_title'), reason + ' ' + t('tv.unsupported_body'), {
+    details: true,
+    action: t('btn.try_again'),
+    onAction: () => location.reload(),
+  });
+}
+
+function languageButtons(): HTMLElement {
+  return h(
+    'div',
+    { class: 'langs', testid: 'langs' },
+    ...LANGS.map((l) =>
+      h('button', {
+        class: l.id === getLang() ? 'lang active' : 'lang',
+        text: l.name,
+        attrs: { lang: l.id, 'data-lang': l.id },
+        on: { click: () => setLang(l.id) },
+      }),
+    ),
+    h('span', { class: 'lang-hint', text: t('tv.language_hint') }),
   );
 }
 
-function renderPairing(pairing: PairResponse, qrUrl: string): HTMLElement {
-  const status = h('div', { class: 'status', testid: 'pair-status', text: 'Waiting for the phone…' });
+/** Draws the pairing screen from pairingView (QR, code, pictures, status). */
+function renderPairing(): void {
+  const view = pairingView;
+  if (!view) return;
+  const { session, qrUrl } = view;
   const qr = h('canvas', { class: 'qr', testid: 'pair-qr', attrs: { 'data-url': qrUrl } });
   try {
     generate(qrUrl).toCanvas(qr, { pad: 2 });
   } catch (_e) {
     qr.className = 'qr hidden';
   }
-  const emoji = emojiText(pairing.emoji);
+  const emoji = emojiText(session.emoji);
   const phoneUrl = location.host + '/phone';
   mount(
     root,
     h(
       'div',
       { class: 'screen pairing' },
-      h('h1', { class: 'title', text: 'Let’s play! Connect a phone 📱' }),
+      languageButtons(),
+      h('h1', { class: 'title', text: t('tv.title') }),
       h(
         'div',
-        { class: 'pair-row' },
-        h('div', { class: 'pair-col' }, qr, h('p', { class: 'small', text: 'Scan with the phone camera' })),
+        { class: view.joined ? 'pair-row hidden' : 'pair-row' },
+        h('div', { class: 'pair-col' }, qr, h('p', { class: 'small', text: t('tv.scan') })),
         h(
           'div',
           { class: 'pair-col' },
-          h('p', { class: 'small', text: 'or open ' + phoneUrl + ' and type:' }),
-          h('div', { class: 'code', testid: 'pair-code', text: formatCode(pairing.code) }),
-          h('p', { class: 'small', text: 'The phone will show:' }),
+          h('p', { class: 'small', text: t('tv.or_open', { url: phoneUrl }), attrs: { dir: 'auto' } }),
+          // digits stay left-to-right even inside Hebrew/Arabic text
+          h('div', { class: 'code', testid: 'pair-code', text: formatCode(session.code), attrs: { dir: 'ltr' } }),
+          h('p', { class: 'small', text: t('tv.phone_will_show') }),
           h('div', { class: 'emoji', testid: 'pair-emoji', text: emoji.symbols }),
           h('div', { class: 'small', testid: 'pair-emoji-names', text: emoji.names }),
         ),
       ),
-      status,
+      h('div', { class: 'status', testid: 'pair-status', text: t(view.statusKey) }),
       checksRow(checks),
     ),
   );
-  return status;
+}
+
+function setStatus(key: TextKey): void {
+  if (!pairingView) return;
+  pairingView.statusKey = key;
+  const el = root.querySelector('[data-testid="pair-status"]');
+  if (el) el.textContent = t(key);
 }
 
 async function createPairing(offer: string, gen: number): Promise<PairResponse | null> {
@@ -143,10 +191,10 @@ async function createPairing(offer: string, gen: number): Promise<PairResponse |
       const e = err as HttpError;
       if (e.status === 0 || e.status >= 500 || e.status === 429) {
         if (e.code === 'storage_not_configured') {
-          showMessage('Setup needed', e.message);
+          showMessage(t('tv.setup_needed'), e.message);
           return null;
         }
-        showMessage('Connecting to the internet…', e.message);
+        showMessage(t('tv.offline'), e.message);
         await sleep(Math.min(30000, 2000 * Math.pow(2, attempt)));
         if (gen !== generation) return null;
         continue;
@@ -159,7 +207,7 @@ async function createPairing(offer: string, gen: number): Promise<PairResponse |
 async function startPairing(): Promise<void> {
   cleanup();
   const gen = ++generation;
-  showMessage('Getting ready…', 'Preparing a code for the phone.');
+  showMessage(t('tv.getting_ready'), t('tv.preparing_code'));
 
   if (!hasWebRtc()) {
     showUnsupported('WebRTC is missing.');
@@ -184,14 +232,15 @@ async function startPairing(): Promise<void> {
   try {
     pairing = await createPairing(offer, gen);
   } catch (err) {
-    showMessage('Something went wrong', (err as Error).message, { action: 'Try again', onAction: startPairing });
+    showMessage(t('tv.error'), (err as Error).message, { action: t('btn.try_again'), onAction: startPairing });
     return;
   }
   if (!pairing || gen !== generation) return;
 
   const session = pairing;
   const qrUrl = location.origin + '/phone/#k=' + session.key;
-  const status = renderPairing(session, qrUrl);
+  pairingView = { session, qrUrl, statusKey: 'tv.waiting', joined: false };
+  renderPairing();
   let deadline = Date.now() + session.expiresInMs;
   let pollMs = session.pollMs;
   let answer: string | null = null;
@@ -209,8 +258,10 @@ async function startPairing(): Promise<void> {
         phoneJoined = true;
         // Give the adult time to confirm and allow the camera; OK abandons a stuck phone.
         deadline = Math.max(deadline, Date.now() + PHONE_SETUP_GRACE_MS);
-        root.querySelector('.pair-row')!.className = 'pair-row hidden';
-        status.textContent = 'Phone found! Starting its camera…  (press OK for a new code)';
+        if (pairingView) pairingView.joined = true;
+        const row = root.querySelector('.pair-row');
+        if (row) row.className = 'pair-row hidden';
+        setStatus('tv.phone_found');
         onOk = () => void startPairing();
       }
       if (res.state === 'answered' && res.answer) answer = res.answer;
@@ -228,34 +279,27 @@ async function startPairing(): Promise<void> {
     );
     cleanup();
     if (phoneJoined) {
-      showMessage('The phone did not connect', 'Check the message on the phone, then press OK for a new code.', {
-        action: 'New code',
-        onAction: startPairing,
-      });
+      showMessage(t('tv.not_connected_title'), t('tv.not_connected_body'), { action: t('btn.new_code'), onAction: startPairing });
     } else {
-      showMessage('The code expired', 'Press OK on the remote to get a new code.', { action: 'New code', onAction: startPairing });
+      showMessage(t('tv.expired_title'), t('tv.expired_body'), { action: t('btn.new_code'), onAction: startPairing });
     }
     return;
   }
 
   onOk = null;
-  status.textContent = 'Connecting…';
+  setStatus('tv.connecting');
   try {
     await rx.acceptAnswer(answer);
   } catch (err) {
     cleanup();
-    showMessage('Could not connect', (err as Error).message, { action: 'Try again', onAction: startPairing });
+    showMessage(t('tv.cannot_connect'), (err as Error).message, { action: t('btn.try_again'), onAction: startPairing });
     return;
   }
   const connected = await waitForConnected(rx.pc, 20000);
   if (gen !== generation) return;
   if (!connected) {
     cleanup();
-    showMessage(
-      'Could not connect to the phone',
-      'Make sure the phone and the TV are on the same Wi-Fi network, then press OK.',
-      { action: 'Try again', onAction: startPairing },
-    );
+    showMessage(t('tv.no_route_title'), t('tv.no_route_body'), { action: t('btn.try_again'), onAction: startPairing });
     return;
   }
 
@@ -275,24 +319,19 @@ async function startPairing(): Promise<void> {
   if (gen !== generation) return;
   if (lan === false) {
     cleanup();
-    showMessage('The phone is not on this Wi-Fi', 'For safety the camera only works on the same home network.' + route, {
-      action: 'Try again',
-      onAction: startPairing,
-    });
+    showMessage(t('tv.not_lan_title'), t('tv.not_lan_body') + route, { action: t('btn.try_again'), onAction: startPairing });
     return;
   }
 
   onOk = null;
+  pairingView = null;
   disposeLive = startGames(rx, lan, (reason: EndReason) => {
     disposeLive = null;
     cleanup();
     if (reason === 'stopped') {
-      showMessage('The phone stopped the camera', 'Press OK to connect again.', { action: 'Connect again', onAction: startPairing });
+      showMessage(t('tv.stopped_title'), t('tv.stopped_body'), { action: t('btn.connect_again'), onAction: startPairing });
     } else {
-      showMessage('Lost the phone', 'Check the phone is awake and on the same Wi-Fi, then press OK.', {
-        action: 'Connect again',
-        onAction: startPairing,
-      });
+      showMessage(t('tv.lost_title'), t('tv.lost_body'), { action: t('btn.connect_again'), onAction: startPairing });
     }
   });
 }
@@ -305,7 +344,7 @@ function startGames(rx: Receiver, lan: boolean | null, onEnd: (reason: EndReason
   const toMenu = (): Scene => menu as MenuScene;
   menu = new MenuScene(
     stage,
-    [{ id: 'tickle-pop', title: 'Tickle Pop', color: 1, start: () => new TickleScene(stage, toMenu, ROUND_SEC) }],
+    [{ id: 'tickle-pop', title: 'game.tickle', color: 1, start: () => new TickleScene(stage, toMenu, ROUND_SEC) }],
     () => new CheckScene(stage, toMenu),
   );
   stage.go(new SetupScene(stage, toMenu));
@@ -322,5 +361,5 @@ function startGames(rx: Receiver, lan: boolean | null, onEnd: (reason: EndReason
 void startPairing().catch((err) => {
   const msg = err instanceof Error ? err.message : String(err);
   if (window.__tvShowError) window.__tvShowError(msg);
-  showMessage('Something went wrong', msg, { action: 'Try again', onAction: () => location.reload(), details: true });
+  showMessage(t('tv.error'), msg, { action: t('btn.try_again'), onAction: () => location.reload(), details: true });
 });

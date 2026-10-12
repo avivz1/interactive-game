@@ -1,12 +1,27 @@
 // Setup: guides the child to stand where the camera sees their whole body.
 
-import { evaluateFit, FIT_HINTS, type FitState } from '../../games/fit';
+import { evaluateFit, type FitState } from '../../games/fit';
+import { t } from '../../shared/i18n';
+import type { VoiceKey } from '../audio';
 import { drawBody } from '../draw';
 import type { Frame, Key, Scene, Stage } from '../stage';
 import { label, panel, ring } from '../ui';
 
 const HOLD_SEC = 1.5;
 const SKIP_HINT_AFTER_SEC = 12;
+/** A hint is spoken once the state has held this long (avoids chatter while moving). */
+const SPEAK_AFTER_SEC = 1.2;
+/** The same hint is repeated at most this often. */
+const REPEAT_SEC = 7;
+
+const FIT_VOICE: Record<FitState, VoiceKey> = {
+  'no-body': 'stand',
+  'head-cut': 'head',
+  'too-close': 'close',
+  'feet-cut': 'feet',
+  'too-far': 'far',
+  ok: 'ok',
+};
 
 export class SetupScene implements Scene {
   readonly name = 'setup';
@@ -14,17 +29,39 @@ export class SetupScene implements Scene {
   private okFor = 0;
   private elapsed = 0;
   private done = false;
+  private stateFor = 0;
+  private spokenState: FitState | null = null;
+  private spokenAt = -100;
 
   constructor(
     private readonly stage: Stage,
     private readonly next: () => Scene,
   ) {}
 
+  enter(): void {
+    this.stage.sound.speak('space');
+  }
+
   update(frame: Frame): void {
     this.elapsed += frame.dt;
-    this.state = evaluateFit(frame.landmarks);
+    const state = evaluateFit(frame.landmarks);
+    this.stateFor = state === this.state ? this.stateFor + frame.dt : 0;
+    this.state = state;
+    this.speakHint();
     this.okFor = this.state === 'ok' ? this.okFor + frame.dt : Math.max(0, this.okFor - frame.dt * 2);
     if (this.okFor >= HOLD_SEC) this.finish();
+  }
+
+  private speakHint(): void {
+    const sound = this.stage.sound;
+    if (sound.isSpeaking) return;
+    const wait = this.state === 'ok' ? 0.2 : SPEAK_AFTER_SEC;
+    if (this.stateFor < wait) return;
+    const fresh = this.state !== this.spokenState;
+    if (!fresh && (this.state === 'ok' || this.elapsed - this.spokenAt < REPEAT_SEC)) return;
+    this.spokenState = this.state;
+    this.spokenAt = this.elapsed;
+    sound.speak(FIT_VOICE[this.state], 0);
   }
 
   private finish(): void {
@@ -67,12 +104,12 @@ export class SetupScene implements Scene {
 
     const titleY = height * 0.1;
     panel(ctx, width * 0.12, titleY - height * 0.055, width * 0.76, height * 0.11, height * 0.03, 'rgba(11, 16, 32, 0.7)');
-    label(ctx, FIT_HINTS[this.state], width / 2, titleY, height * 0.05, ok ? '#7dffa1' : '#fff');
+    label(ctx, t(('fit.' + this.state) as 'fit.ok'), width / 2, titleY, height * 0.05, ok ? '#7dffa1' : '#fff');
     if (ok) ring(ctx, { x: width * 0.84, y: titleY }, height * 0.035, this.okFor / HOLD_SEC, '#7dffa1', height * 0.012);
 
-    const tips: string[] = ['Make some space around you 🧸'];
-    if (!this.stage.sound.ready) tips.push('🔊 Press OK on the remote for sound');
-    else if (this.elapsed > SKIP_HINT_AFTER_SEC) tips.push('Press OK on the remote to play anyway');
+    const tips: string[] = [t('setup.space')];
+    if (!this.stage.sound.ready) tips.push(t('hint.sound'));
+    else if (this.elapsed > SKIP_HINT_AFTER_SEC) tips.push(t('hint.skip'));
     tips.forEach((t, i) => label(ctx, t, width / 2, height * (0.86 + i * 0.06), height * 0.035, '#ffd600'));
   }
 }

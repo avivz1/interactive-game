@@ -1,14 +1,16 @@
 // Phone app: joins the TV with a code (or QR link), confirms it is the right TV,
 // then streams the camera and body tracking to the TV over the home Wi-Fi.
+// The language chosen here (Hebrew by default) is also sent to the TV.
 
-import { emojiText, type JoinResponse } from '../shared/api';
+import type { JoinResponse } from '../shared/api';
 import { h, mount } from '../shared/dom';
 import { HttpError, apiFetch, sleep } from '../shared/http';
+import { LANGS, apiErrorText, applyDocumentLang, emojiText, getLang, onLangChange, setLang, t } from '../shared/i18n';
 import { encodePose, parseCtl } from '../shared/protocol';
 import { checkLan, waitForConnected, type SelectedPair } from '../shared/rtc';
 import { ScreenWakeLock, cameraErrorMessage, openCamera, type Facing } from './camera';
 import { MediaPipePose, SyntheticPose, type PoseSource } from './pose';
-import { Sender } from './sender';
+import { NotLocalError, Sender } from './sender';
 
 const root = document.getElementById('app') as HTMLElement;
 const synthetic = new URLSearchParams(location.search).get('pose') === 'synthetic';
@@ -26,91 +28,109 @@ interface Live {
 }
 
 let live: Live | null = null;
+/** Redraws the current screen (used when the language changes). */
+let rerender: () => void = () => undefined;
+
+applyDocumentLang();
+onLangChange((lang) => {
+  rerender();
+  if (live) live.sender.sendCtl({ t: 'lang', lang });
+});
 
 function inAppBrowser(): boolean {
   return /FBAN|FBAV|Instagram|Line\/|; wv\)|GSA\//.test(navigator.userAgent);
 }
 
-function screen(...children: (Node | null)[]): void {
-  mount(root, h('main', { class: 'phone' }, ...children.filter((c): c is Node => c !== null)));
-}
-
-function errorText(err: unknown): string {
-  return err instanceof HttpError || err instanceof Error ? err.message : String(err);
-}
-
-function showHome(error?: string): void {
-  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    screen(
-      h('h1', { text: 'Camera not available' }),
-      h('p', {
-        text: inAppBrowser()
-          ? 'This app opened inside another app. Open the link in Chrome or Safari instead.'
-          : 'Open this page in Chrome or Safari using the https:// link.',
+function langBar(): HTMLElement {
+  return h(
+    'div',
+    { class: 'langs', testid: 'langs' },
+    ...LANGS.map((l) =>
+      h('button', {
+        class: l.id === getLang() ? 'lang active' : 'lang',
+        text: l.name,
+        attrs: { lang: l.id, 'data-lang': l.id, type: 'button' },
+        on: { click: () => setLang(l.id) },
       }),
-    );
+    ),
+  );
+}
+
+/** Shows a screen; `draw` is called again whenever the language changes. */
+function show(draw: () => (Node | null)[]): void {
+  rerender = () => mount(root, h('main', { class: 'phone' }, langBar(), ...draw().filter((c): c is Node => c !== null)));
+  rerender();
+}
+
+/** Turns any error into a message in the current language. */
+function errorText(err: unknown): string {
+  if (err instanceof HttpError) return apiErrorText(err.code, err.message);
+  if (err instanceof NotLocalError) return t('ph.not_lan');
+  return err instanceof Error ? err.message : String(err);
+}
+
+function showHome(error?: () => string): void {
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    show(() => [h('h1', { text: t('ph.no_camera_title') }), h('p', { text: inAppBrowser() ? t('ph.in_app') : t('ph.open_https') })]);
     return;
   }
-  const input = h('input', {
-    class: 'code-input',
-    testid: 'code-input',
-    attrs: { inputmode: 'numeric', autocomplete: 'off', maxlength: '7', placeholder: '123 456', 'aria-label': 'TV code' },
+  let typed = '';
+  show(() => {
+    const input = h('input', {
+      class: 'code-input',
+      testid: 'code-input',
+      attrs: { inputmode: 'numeric', autocomplete: 'off', maxlength: '7', placeholder: '123 456', 'aria-label': 'TV code', dir: 'ltr' },
+      on: { input: () => (typed = input.value) },
+    });
+    input.value = typed;
+    const submit = (e: Event) => {
+      e.preventDefault();
+      void join({ code: input.value });
+    };
+    setTimeout(() => input.focus(), 0);
+    return [
+      h('h1', { text: t('ph.connect_title') }),
+      h('p', { text: t('ph.connect_body') }),
+      inAppBrowser() ? h('p', { class: 'warn', text: t('ph.in_app_tip') }) : null,
+      h('form', { on: { submit } }, input, h('button', { class: 'btn primary', testid: 'join', text: t('ph.connect'), attrs: { type: 'submit' } })),
+      error ? h('p', { class: 'error', testid: 'error', text: error() }) : null,
+    ];
   });
-  const submit = (e: Event) => {
-    e.preventDefault();
-    void join({ code: input.value });
-  };
-  screen(
-    h('h1', { text: 'Connect to the TV 📺' }),
-    h('p', { text: 'Open this game on the TV and type the code it shows.' }),
-    inAppBrowser() ? h('p', { class: 'warn', text: 'Tip: for the camera to work, open this link in Chrome or Safari.' }) : null,
-    h(
-      'form',
-      { on: { submit } },
-      input,
-      h('button', { class: 'btn primary', testid: 'join', text: 'Connect', attrs: { type: 'submit' } }),
-    ),
-    error ? h('p', { class: 'error', testid: 'error', text: error }) : null,
-  );
-  input.focus();
 }
 
 async function join(body: { code?: string; key?: string }): Promise<void> {
-  screen(h('h1', { text: 'Finding the TV…' }));
+  show(() => [h('h1', { text: t('ph.finding') })]);
   try {
     const session = await apiFetch<JoinResponse>('/api/join', { method: 'POST', body });
     showConfirm(session);
   } catch (err) {
-    showHome(errorText(err));
+    showHome(() => errorText(err));
   }
 }
 
 function showConfirm(session: JoinResponse): void {
-  const emoji = emojiText(session.emoji);
-  screen(
-    h('h1', { text: 'Is this your TV?' }),
-    h('p', { text: 'The TV should show:' }),
-    h('div', { class: 'emoji', testid: 'confirm-emoji', text: emoji.symbols }),
-    h('p', { class: 'small', testid: 'confirm-emoji-names', text: emoji.names }),
-    h(
-      'div',
-      { class: 'note' },
-      h('p', { text: '🔒 The camera video goes straight to your TV over your home Wi-Fi. It is not uploaded or recorded.' }),
-      h('p', { text: '📐 Stand the phone sideways, 2–3 meters from the play area, with the back camera facing the child.' }),
-    ),
-    h('button', { class: 'btn primary', testid: 'confirm-yes', text: 'Yes — start the camera', on: { click: () => void start(session) } }),
-    h('button', {
-      class: 'btn',
-      testid: 'confirm-no',
-      text: 'No, that’s not my TV',
-      on: {
-        click: () => {
-          void closeRemote(session);
-          showHome('Cancelled. Check the code on your TV and try again.');
+  show(() => {
+    const emoji = emojiText(session.emoji);
+    return [
+      h('h1', { text: t('ph.confirm_title') }),
+      h('p', { text: t('ph.tv_should_show') }),
+      h('div', { class: 'emoji', testid: 'confirm-emoji', text: emoji.symbols }),
+      h('p', { class: 'small', testid: 'confirm-emoji-names', text: emoji.names }),
+      h('div', { class: 'note' }, h('p', { text: t('ph.privacy') }), h('p', { text: t('ph.placement') })),
+      h('button', { class: 'btn primary', testid: 'confirm-yes', text: t('ph.yes'), on: { click: () => void start(session) } }),
+      h('button', {
+        class: 'btn',
+        testid: 'confirm-no',
+        text: t('ph.no'),
+        on: {
+          click: () => {
+            void closeRemote(session);
+            showHome(() => t('ph.cancelled'));
+          },
         },
-      },
-    }),
-  );
+      }),
+    ];
+  });
 }
 
 async function closeRemote(session: JoinResponse): Promise<void> {
@@ -121,12 +141,12 @@ async function closeRemote(session: JoinResponse): Promise<void> {
   }
 }
 
-function showFailure(message: string): void {
-  screen(
-    h('h1', { text: 'Not connected' }),
-    h('p', { class: 'error', testid: 'error', text: message }),
-    h('button', { class: 'btn primary', text: 'Try again', on: { click: () => location.replace('/phone/') } }),
-  );
+function showFailure(message: () => string): void {
+  show(() => [
+    h('h1', { text: t('ph.not_connected') }),
+    h('p', { class: 'error', testid: 'error', text: message() }),
+    h('button', { class: 'btn primary', text: t('btn.try_again'), on: { click: () => location.replace('/phone/') } }),
+  ]);
 }
 
 function onCellular(): boolean {
@@ -137,16 +157,16 @@ function onCellular(): boolean {
 async function start(session: JoinResponse): Promise<void> {
   if (onCellular()) {
     void closeRemote(session);
-    showFailure('This phone is using mobile data. Connect it to your home Wi-Fi (the same one as the TV) and try again.');
+    showFailure(() => t('ph.cellular'));
     return;
   }
-  screen(h('h1', { text: 'Starting the camera…' }));
+  show(() => [h('h1', { text: t('ph.starting_camera') })]);
   let stream: MediaStream;
   try {
     stream = await openCamera('environment');
   } catch (err) {
     void closeRemote(session);
-    showFailure(cameraErrorMessage(err));
+    showFailure(() => cameraErrorMessage(err));
     return;
   }
 
@@ -165,16 +185,16 @@ async function start(session: JoinResponse): Promise<void> {
     await apiFetch('/api/session/' + session.sid + '/answer', { method: 'POST', body: { answer }, token: session.phoneToken });
   } catch (err) {
     stopLive(false);
-    showFailure(errorText(err));
+    showFailure(() => errorText(err));
     return;
   }
 
-  screen(h('h1', { text: 'Connecting to the TV…' }), video);
+  show(() => [h('h1', { text: t('ph.connecting_tv') }), video]);
   const connected = await waitForConnected(sender.pc, 20000);
   if (live !== state) return;
   if (!connected) {
     stopLive(false);
-    showFailure('Could not reach the TV. Make sure the phone and the TV are on the same Wi-Fi network.');
+    showFailure(() => t('ph.no_route'));
     return;
   }
 
@@ -193,7 +213,7 @@ async function start(session: JoinResponse): Promise<void> {
   if (live !== state) return;
   if (lan !== true) {
     stopLive(true);
-    showFailure('For safety, the camera only works when the phone and the TV are on the same home Wi-Fi. (' + route + ')');
+    showFailure(() => t('ph.not_lan') + ' (' + route + ')');
     return;
   }
 
@@ -202,7 +222,7 @@ async function start(session: JoinResponse): Promise<void> {
   } catch (err) {
     if (live !== state) return;
     stopLive(true);
-    showFailure(errorText(err));
+    showFailure(() => errorText(err));
     return;
   }
   if (live !== state) return;
@@ -215,14 +235,14 @@ async function start(session: JoinResponse): Promise<void> {
   sender.onChannelClose = () => {
     if (live === state && !state.ended) {
       stopLive(false);
-      showFailure('The TV disconnected.');
+      showFailure(() => t('ph.tv_left'));
     }
   };
   sender.pc.addEventListener('iceconnectionstatechange', () => {
     const s = sender.pc.iceConnectionState;
     if ((s === 'failed' || s === 'closed') && live === state && !state.ended) {
       stopLive(false);
-      showFailure('Lost the connection to the TV.');
+      showFailure(() => t('ph.lost'));
     }
   });
 
@@ -231,10 +251,11 @@ async function start(session: JoinResponse): Promise<void> {
   if (live !== state) return;
   if (!channelsOpen) {
     stopLive(false);
-    showFailure('Could not reach the TV. Make sure the phone and the TV are on the same Wi-Fi network.');
+    showFailure(() => t('ph.no_route'));
     return;
   }
   sendHello(state);
+  sender.sendCtl({ t: 'lang', lang: getLang() });
   await startTracking(state);
 }
 
@@ -255,20 +276,28 @@ function sendHello(state: Live): void {
   });
 }
 
+/** Status line on the live screen, kept across language re-renders. */
+let trackStatus: () => string = () => t('ph.starting');
+
+function setTrackStatus(text: () => string): void {
+  trackStatus = text;
+  const el = document.getElementById('track-status');
+  if (el) el.textContent = text();
+}
+
 async function startTracking(state: Live): Promise<void> {
   const pose: PoseSource = synthetic ? new SyntheticPose() : new MediaPipePose();
   state.pose = pose;
   let seq = 0;
-  const status = document.getElementById('track-status');
   try {
-    if (status) status.textContent = 'Loading body tracking…';
+    setTrackStatus(() => t('ph.loading_tracking'));
     await pose.start(state.video, (landmarks, captureTime) => {
       const ch = state.sender.pose;
       if (!ch || ch.readyState !== 'open' || ch.bufferedAmount > 8192) return;
       ch.send(encodePose(seq++, captureTime, landmarks));
     });
   } catch (err) {
-    if (status) status.textContent = 'Body tracking failed to start: ' + errorText(err);
+    setTrackStatus(() => t('ph.tracking_failed', { msg: errorText(err) }));
     return;
   }
   if (live !== state) {
@@ -278,10 +307,9 @@ async function startTracking(state: Live): Promise<void> {
   state.timers.push(
     setInterval(() => {
       state.sender.sendCtl({ t: 'stats', fps: pose.fps, inferMs: pose.inferMs, model: pose.model });
-      if (status) {
-        status.textContent =
-          'Tracking ' + pose.fps.toFixed(0) + ' fps' + (pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '') + ' · ' + pose.model;
-      }
+      const fps = pose.fps.toFixed(0);
+      const ms = pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '';
+      setTrackStatus(() => t('ph.tracking', { fps }) + ms + ' · ' + pose.model);
     }, 2000),
   );
 }
@@ -316,7 +344,6 @@ function showLive(state: Live): void {
   const flip = async () => {
     if (switching || live !== state) return;
     switching = true;
-    const status = document.getElementById('track-status');
     const previous = state.facing;
     const facing: Facing = previous === 'environment' ? 'user' : 'environment';
     // Many Android phones cannot open two cameras at once: release the current one first.
@@ -324,7 +351,7 @@ function showLive(state: Live): void {
     try {
       if (await useStream(state, await openCamera(facing), facing)) sendHello(state);
     } catch (err) {
-      if (status) status.textContent = cameraErrorMessage(err);
+      setTrackStatus(() => cameraErrorMessage(err));
       try {
         await useStream(state, await openCamera(previous), previous);
       } catch {
@@ -334,28 +361,30 @@ function showLive(state: Live): void {
       switching = false;
     }
   };
-  screen(
-    h('h1', { testid: 'live', text: '📷 Camera is on' }),
-    h('p', { text: 'Look at the TV! Keep this phone still and plugged in.' }),
+  show(() => [
+    h('h1', { testid: 'live', text: t('ph.live_title') }),
+    h('p', { text: t('ph.live_body') }),
     state.video,
-    h('p', { class: 'small', id: 'track-status', text: 'Starting…' }),
-    h('button', { class: 'btn', text: 'Switch camera', on: { click: () => void flip() } }),
+    h('p', { class: 'small', id: 'track-status', text: trackStatus() }),
+    h('button', { class: 'btn', text: t('ph.switch_camera'), on: { click: () => void flip() } }),
     h('button', {
       class: 'btn danger',
       testid: 'stop',
-      text: 'Stop',
+      text: t('ph.stop'),
       on: {
         click: () => {
           stopLive(true);
-          screen(
-            h('h1', { text: 'Stopped' }),
-            h('p', { text: 'The camera is off.' }),
-            h('button', { class: 'btn primary', text: 'Connect again', on: { click: () => location.replace('/phone/') } }),
-          );
+          show(() => [
+            h('h1', { text: t('ph.stopped_title') }),
+            h('p', { text: t('ph.stopped_body') }),
+            h('button', { class: 'btn primary', text: t('btn.connect_again'), on: { click: () => location.replace('/phone/') } }),
+          ]);
         },
       },
     }),
-  );
+  ]);
+  // re-mounting moves the <video> element, which pauses it on some browsers
+  void state.video.play().catch(() => undefined);
 }
 
 function stopLive(notifyTv: boolean): void {

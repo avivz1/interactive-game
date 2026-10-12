@@ -3,6 +3,7 @@
 
 import type { Pt } from '../../shared/body';
 import { Dwell } from '../../games/dwell';
+import { t, type TextKey } from '../../shared/i18n';
 import { drawCritter } from '../critters';
 import { drawBody } from '../draw';
 import type { Frame, Key, Scene, Stage } from '../stage';
@@ -10,7 +11,7 @@ import { distance, label, ring } from '../ui';
 
 export interface MenuItem {
   id: string;
-  title: string;
+  title: TextKey;
   color: number;
   start: () => Scene;
 }
@@ -37,8 +38,12 @@ export class MenuScene implements Scene {
     this.tiles = items.map((item) => ({ item, at: { x: 0, y: 0 }, r: 0, dwell: new Dwell(1500) }));
   }
 
+  private sinceSpoken = 0;
+
   enter(): void {
     this.chosen = false;
+    this.sinceSpoken = 0;
+    this.stage.sound.speak('menu', 0);
     for (const t of this.tiles) {
       t.dwell.reset();
       t.r = 0;
@@ -54,6 +59,12 @@ export class MenuScene implements Scene {
 
   update(frame: Frame): void {
     this.age += frame.dt;
+    // Remind every 20 s while nobody chooses.
+    this.sinceSpoken += frame.dt;
+    if (this.sinceSpoken > 20) {
+      this.sinceSpoken = 0;
+      this.stage.sound.speak('menu', 0);
+    }
     const { rect, body } = frame;
     const s = body.shoulderWidth;
     const r = Math.max(s * 0.75, rect.h * 0.09);
@@ -92,16 +103,17 @@ export class MenuScene implements Scene {
   render(ctx: CanvasRenderingContext2D, frame: Frame): void {
     const { width, height } = frame;
     drawBody(ctx, frame.body, 0.35);
-    this.tiles.forEach((t, i) => {
-      const bob = Math.sin(this.age * 2 + i) * t.r * 0.05;
-      const at = { x: t.at.x, y: t.at.y + bob };
-      drawCritter(ctx, { x: at.x, y: at.y, r: t.r, color: t.item.color, kind: 'normal', stage: t.dwell.progress > 0 ? 2 : 0, age: this.age, touched: false }, frame.body.hands[0] || frame.body.hands[1]);
-      ring(ctx, at, t.r * 1.12, t.dwell.progress, '#ffd600', Math.max(6, t.r * 0.1));
-      if (i === this.focus && this.tiles.length > 1) ring(ctx, at, t.r * 1.3, 0, '#fff', 3);
-      label(ctx, t.item.title, at.x, at.y + t.r * 1.45, Math.max(24, t.r * 0.32), '#fff');
+    this.tiles.forEach((tile, i) => {
+      const bob = Math.sin(this.age * 2 + i) * tile.r * 0.05;
+      const at = { x: tile.at.x, y: tile.at.y + bob };
+      const look = frame.body.hands[0] || frame.body.hands[1];
+      drawCritter(ctx, { x: at.x, y: at.y, r: tile.r, color: tile.item.color, kind: 'normal', stage: tile.dwell.progress > 0 ? 2 : 0, age: this.age, touched: false }, look);
+      ring(ctx, at, tile.r * 1.12, tile.dwell.progress, '#ffd600', Math.max(6, tile.r * 0.1));
+      if (i === this.focus && this.tiles.length > 1) ring(ctx, at, tile.r * 1.3, 0, '#fff', 3);
+      label(ctx, t(tile.item.title), at.x, at.y + tile.r * 1.45, Math.max(24, tile.r * 0.32), '#fff');
     });
-    label(ctx, 'Raise your hand to a game to play!', width / 2, height * 0.06, height * 0.045, '#ffd600');
-    label(ctx, 'Remote: OK = play  ·  ▼ = TV check', width / 2, height * 0.95, height * 0.028, 'rgba(255,255,255,0.8)');
-    if (!this.stage.sound.ready) label(ctx, '🔊 Press OK on the remote for sound', width / 2, height * 0.89, height * 0.032, '#ffd600');
+    label(ctx, t('menu.title'), width / 2, height * 0.06, height * 0.045, '#ffd600');
+    label(ctx, t('menu.remote'), width / 2, height * 0.95, height * 0.028, 'rgba(255,255,255,0.8)');
+    if (!this.stage.sound.ready) label(ctx, t('hint.sound'), width / 2, height * 0.89, height * 0.032, '#ffd600');
   }
 }

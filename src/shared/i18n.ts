@@ -1,0 +1,460 @@
+// Languages and on-screen text for the TV and the phone (Hebrew by default).
+// Hebrew and Arabic address the children in the plural so no one is left out.
+
+import { EMOJI } from './api';
+
+export type Lang = 'he' | 'ar' | 'en';
+
+export const LANGS: ReadonlyArray<{ id: Lang; name: string; rtl: boolean }> = [
+  { id: 'he', name: 'עברית', rtl: true },
+  { id: 'ar', name: 'العربية', rtl: true },
+  { id: 'en', name: 'English', rtl: false },
+];
+
+export const DEFAULT_LANG: Lang = 'he';
+
+const en = {
+  // pairing (TV)
+  'tv.getting_ready': 'Getting ready…',
+  'tv.preparing_code': 'Preparing a code for the phone.',
+  'tv.title': 'Let’s play! Connect a phone 📱',
+  'tv.scan': 'Scan with the phone camera',
+  'tv.or_open': 'or open {url} and type:',
+  'tv.phone_will_show': 'The phone will show:',
+  'tv.waiting': 'Waiting for the phone…',
+  'tv.phone_found': 'Phone found! Starting its camera…  (press OK for a new code)',
+  'tv.connecting': 'Connecting…',
+  'tv.language_hint': '◀ ▶  Language',
+  'tv.unsupported_title': '😕 This TV browser can’t receive the phone camera',
+  'tv.unsupported_body': 'The games need live video from the phone (WebRTC). Please send us the checks below.',
+  'tv.setup_needed': 'Setup needed',
+  'tv.offline': 'Connecting to the internet…',
+  'tv.error': 'Something went wrong',
+  'tv.not_connected_title': 'The phone did not connect',
+  'tv.not_connected_body': 'Check the message on the phone, then press OK for a new code.',
+  'tv.expired_title': 'The code expired',
+  'tv.expired_body': 'Press OK on the remote to get a new code.',
+  'tv.cannot_connect': 'Could not connect',
+  'tv.no_route_title': 'Could not connect to the phone',
+  'tv.no_route_body': 'Make sure the phone and the TV are on the same Wi-Fi network, then press OK.',
+  'tv.not_lan_title': 'The phone is not on this Wi-Fi',
+  'tv.not_lan_body': 'For safety the camera only works on the same home network.',
+  'tv.stopped_title': 'The phone stopped the camera',
+  'tv.stopped_body': 'Press OK to connect again.',
+  'tv.lost_title': 'Lost the phone',
+  'tv.lost_body': 'Check the phone is awake and on the same Wi-Fi, then press OK.',
+  'tv.reconnecting': 'Phone connection lost — waiting…',
+  'btn.try_again': 'Try again',
+  'btn.new_code': 'New code',
+  'btn.connect_again': 'Connect again',
+  // setup
+  'fit.no-body': 'Stand in front of the camera',
+  'fit.head-cut': 'Step back a little so I can see your head',
+  'fit.too-close': 'Step back so I can see your tummy and legs',
+  'fit.feet-cut': 'Step back a little — I can’t see your feet',
+  'fit.too-far': 'Come a little closer',
+  'fit.ok': 'Perfect! Stay there…',
+  'setup.space': 'Make some space around you 🧸',
+  'hint.sound': '🔊 Press OK on the remote for sound',
+  'hint.skip': 'Press OK on the remote to play anyway',
+  // menu
+  'menu.title': 'Raise your hand to a game to play!',
+  'menu.remote': 'Remote: OK = play  ·  ▼ = TV check',
+  'game.tickle': 'Tickle Pop',
+  // tickle pop
+  'tickle.intro': 'Tickle the bubbles! 🤗',
+  'tickle.finale': 'Giggle storm!',
+  'tickle.away': 'Where did you go? Come back! 👀',
+  'tickle.great': 'Great tickling!',
+  'tickle.popped': 'Bubbles popped: {n}',
+  'tickle.back_soon': 'Back to the games in a moment…',
+  'tickle.giggle1': 'hee!',
+  'tickle.giggle2': 'hee hee!',
+  'tickle.giggle3': 'HA HA HA!',
+  'tickle.wheee': 'Wheee!',
+  'tickle.achoo': 'Achoo!',
+  'tickle.morning': 'Good morning!',
+  // phone
+  'ph.no_camera_title': 'Camera not available',
+  'ph.in_app': 'This app opened inside another app. Open the link in Chrome or Safari instead.',
+  'ph.open_https': 'Open this page in Chrome or Safari using the https:// link.',
+  'ph.connect_title': 'Connect to the TV 📺',
+  'ph.connect_body': 'Open this game on the TV and type the code it shows.',
+  'ph.in_app_tip': 'Tip: for the camera to work, open this link in Chrome or Safari.',
+  'ph.connect': 'Connect',
+  'ph.finding': 'Finding the TV…',
+  'ph.confirm_title': 'Is this your TV?',
+  'ph.tv_should_show': 'The TV should show:',
+  'ph.privacy': '🔒 The camera video goes straight to your TV over your home Wi-Fi. It is not uploaded or recorded.',
+  'ph.placement': '📐 Stand the phone sideways, 2–3 meters from the play area, with the back camera facing the child.',
+  'ph.yes': 'Yes — start the camera',
+  'ph.no': 'No, that’s not my TV',
+  'ph.cancelled': 'Cancelled. Check the code on your TV and try again.',
+  'ph.not_connected': 'Not connected',
+  'ph.starting_camera': 'Starting the camera…',
+  'ph.connecting_tv': 'Connecting to the TV…',
+  'ph.cellular': 'This phone is using mobile data. Connect it to your home Wi-Fi (the same one as the TV) and try again.',
+  'ph.no_route': 'Could not reach the TV. Make sure the phone and the TV are on the same Wi-Fi network.',
+  'ph.not_lan': 'For safety, the camera only works when the phone and the TV are on the same home Wi-Fi.',
+  'ph.tv_left': 'The TV disconnected.',
+  'ph.lost': 'Lost the connection to the TV.',
+  'ph.live_title': '📷 Camera is on',
+  'ph.live_body': 'Look at the TV! Keep this phone still and plugged in.',
+  'ph.starting': 'Starting…',
+  'ph.loading_tracking': 'Loading body tracking…',
+  'ph.tracking_failed': 'Body tracking failed to start: {msg}',
+  'ph.tracking': 'Tracking {fps} fps',
+  'ph.switch_camera': 'Switch camera',
+  'ph.stop': 'Stop',
+  'ph.stopped_title': 'Stopped',
+  'ph.stopped_body': 'The camera is off.',
+  'cam.blocked': 'Camera permission was blocked. Allow the camera for this site in the browser settings, then reload.',
+  'cam.not_found': 'No suitable camera was found on this phone.',
+  'cam.busy': 'The camera is busy. Close other apps that use the camera and try again.',
+  'cam.failed': 'Could not start the camera.',
+  // errors from the pairing service
+  'err.not_found': 'Code not found or expired. Check the code on the TV.',
+  'err.code': 'Enter the 6-digit code shown on the TV.',
+  'err.rate_limited': 'Too many tries. Please wait a moment.',
+  'err.busy': 'Typed codes are paused for a few minutes. Scan the QR code instead.',
+  'err.expired': 'The TV code expired. Start again.',
+  'err.network': 'Network problem. Check the Wi-Fi connection.',
+  // pairing emoji names
+  'emoji.0': 'dog',
+  'emoji.1': 'cat',
+  'emoji.2': 'fox',
+  'emoji.3': 'frog',
+  'emoji.4': 'monkey',
+  'emoji.5': 'panda',
+  'emoji.6': 'lion',
+  'emoji.7': 'pig',
+  'emoji.8': 'pizza',
+  'emoji.9': 'strawberry',
+  'emoji.10': 'banana',
+  'emoji.11': 'rocket',
+  'emoji.12': 'ball',
+  'emoji.13': 'rainbow',
+  'emoji.14': 'balloon',
+  'emoji.15': 'star',
+};
+
+export type TextKey = keyof typeof en;
+
+const he: Record<TextKey, string> = {
+  'tv.getting_ready': 'מתכוננים…',
+  'tv.preparing_code': 'מכינים קוד בשביל הטלפון.',
+  'tv.title': 'בואו נשחק! חברו טלפון 📱',
+  'tv.scan': 'סרקו עם המצלמה של הטלפון',
+  'tv.or_open': 'או פתחו את {url} והקלידו:',
+  'tv.phone_will_show': 'בטלפון יופיע:',
+  'tv.waiting': 'מחכים לטלפון…',
+  'tv.phone_found': 'הטלפון נמצא! מפעילים את המצלמה…  (OK לקוד חדש)',
+  'tv.connecting': 'מתחברים…',
+  'tv.language_hint': '◀ ▶  שפה',
+  'tv.unsupported_title': '😕 הדפדפן של הטלוויזיה לא יכול לקבל את מצלמת הטלפון',
+  'tv.unsupported_body': 'המשחקים צריכים וידאו חי מהטלפון (WebRTC). שלחו לנו את הבדיקות שלמטה.',
+  'tv.setup_needed': 'נדרשת הגדרה',
+  'tv.offline': 'מתחברים לאינטרנט…',
+  'tv.error': 'משהו השתבש',
+  'tv.not_connected_title': 'הטלפון לא התחבר',
+  'tv.not_connected_body': 'בדקו את ההודעה בטלפון, ואז לחצו OK לקוד חדש.',
+  'tv.expired_title': 'הקוד פג',
+  'tv.expired_body': 'לחצו OK בשלט כדי לקבל קוד חדש.',
+  'tv.cannot_connect': 'לא הצלחנו להתחבר',
+  'tv.no_route_title': 'לא הצלחנו להתחבר לטלפון',
+  'tv.no_route_body': 'ודאו שהטלפון והטלוויזיה מחוברים לאותה רשת Wi-Fi, ואז לחצו OK.',
+  'tv.not_lan_title': 'הטלפון לא מחובר ל-Wi-Fi הזה',
+  'tv.not_lan_body': 'מטעמי בטיחות המצלמה עובדת רק באותה רשת ביתית.',
+  'tv.stopped_title': 'הטלפון כיבה את המצלמה',
+  'tv.stopped_body': 'לחצו OK כדי להתחבר שוב.',
+  'tv.lost_title': 'הקשר עם הטלפון אבד',
+  'tv.lost_body': 'ודאו שהטלפון ער ומחובר לאותו Wi-Fi, ואז לחצו OK.',
+  'tv.reconnecting': 'הקשר עם הטלפון נותק — ממתינים…',
+  'btn.try_again': 'נסו שוב',
+  'btn.new_code': 'קוד חדש',
+  'btn.connect_again': 'להתחבר שוב',
+  'fit.no-body': 'עמדו מול המצלמה',
+  'fit.head-cut': 'קחו צעד קטן אחורה כדי שאראה את הראש',
+  'fit.too-close': 'קחו צעד אחורה כדי שאראה את הבטן והרגליים',
+  'fit.feet-cut': 'עוד צעד קטן אחורה — אני לא רואה את הרגליים',
+  'fit.too-far': 'התקרבו קצת',
+  'fit.ok': 'מושלם! הישארו שם…',
+  'setup.space': 'פנו מקום מסביבכם 🧸',
+  'hint.sound': '🔊 לחצו OK בשלט כדי להפעיל צליל',
+  'hint.skip': 'לחצו OK בשלט כדי לשחק בכל זאת',
+  'menu.title': 'הרימו יד אל משחק כדי לשחק!',
+  'menu.remote': 'שלט: OK = לשחק  ·  ▼ = בדיקת טלוויזיה',
+  'game.tickle': 'דגדוג בועות',
+  'tickle.intro': 'דגדגו את הבועות! 🤗',
+  'tickle.finale': 'סערת צחקוקים!',
+  'tickle.away': 'לאן נעלמתם? חזרו! 👀',
+  'tickle.great': 'איזה דגדוג מעולה!',
+  'tickle.popped': 'בועות שפוצצתם: {n}',
+  'tickle.back_soon': 'חוזרים למשחקים עוד רגע…',
+  'tickle.giggle1': 'הי!',
+  'tickle.giggle2': 'הי הי!',
+  'tickle.giggle3': 'חה חה חה!',
+  'tickle.wheee': 'וויייי!',
+  'tickle.achoo': 'אפצ׳י!',
+  'tickle.morning': 'בוקר טוב!',
+  'ph.no_camera_title': 'המצלמה לא זמינה',
+  'ph.in_app': 'האתר נפתח בתוך אפליקציה אחרת. פתחו את הקישור ב-Chrome או ב-Safari.',
+  'ph.open_https': 'פתחו את הדף ב-Chrome או ב-Safari דרך הקישור עם https://.',
+  'ph.connect_title': 'מתחברים לטלוויזיה 📺',
+  'ph.connect_body': 'פתחו את המשחק בטלוויזיה והקלידו את הקוד שמופיע בה.',
+  'ph.in_app_tip': 'טיפ: כדי שהמצלמה תעבוד, פתחו את הקישור ב-Chrome או ב-Safari.',
+  'ph.connect': 'התחברות',
+  'ph.finding': 'מחפשים את הטלוויזיה…',
+  'ph.confirm_title': 'זו הטלוויזיה שלכם?',
+  'ph.tv_should_show': 'בטלוויזיה אמור להופיע:',
+  'ph.privacy': '🔒 הווידאו מהמצלמה עובר ישירות לטלוויזיה דרך ה-Wi-Fi הביתי. הוא לא מועלה לאינטרנט ולא מוקלט.',
+  'ph.placement': '📐 העמידו את הטלפון לרוחב, 2–3 מטרים מאזור המשחק, כשהמצלמה האחורית מופנית לילד.',
+  'ph.yes': 'כן — להפעיל מצלמה',
+  'ph.no': 'לא, זו לא הטלוויזיה שלי',
+  'ph.cancelled': 'בוטל. בדקו את הקוד בטלוויזיה ונסו שוב.',
+  'ph.not_connected': 'לא מחובר',
+  'ph.starting_camera': 'מפעילים את המצלמה…',
+  'ph.connecting_tv': 'מתחברים לטלוויזיה…',
+  'ph.cellular': 'הטלפון משתמש בגלישה סלולרית. חברו אותו ל-Wi-Fi הביתי (אותו אחד של הטלוויזיה) ונסו שוב.',
+  'ph.no_route': 'לא הצלחנו להגיע לטלוויזיה. ודאו שהטלפון והטלוויזיה מחוברים לאותה רשת Wi-Fi.',
+  'ph.not_lan': 'מטעמי בטיחות, המצלמה עובדת רק כשהטלפון והטלוויזיה באותו Wi-Fi ביתי.',
+  'ph.tv_left': 'הטלוויזיה התנתקה.',
+  'ph.lost': 'הקשר עם הטלוויזיה אבד.',
+  'ph.live_title': '📷 המצלמה פועלת',
+  'ph.live_body': 'הסתכלו בטלוויזיה! השאירו את הטלפון יציב ומחובר לחשמל.',
+  'ph.starting': 'מתחילים…',
+  'ph.loading_tracking': 'טוענים זיהוי גוף…',
+  'ph.tracking_failed': 'זיהוי הגוף לא הצליח להתחיל: {msg}',
+  'ph.tracking': 'זיהוי {fps} פריימים בשנייה',
+  'ph.switch_camera': 'החלפת מצלמה',
+  'ph.stop': 'עצירה',
+  'ph.stopped_title': 'נעצר',
+  'ph.stopped_body': 'המצלמה כבויה.',
+  'cam.blocked': 'הגישה למצלמה נחסמה. אפשרו מצלמה לאתר הזה בהגדרות הדפדפן ואז טענו מחדש.',
+  'cam.not_found': 'לא נמצאה מצלמה מתאימה בטלפון.',
+  'cam.busy': 'המצלמה בשימוש. סגרו אפליקציות אחרות שמשתמשות במצלמה ונסו שוב.',
+  'cam.failed': 'לא הצלחנו להפעיל את המצלמה.',
+  'err.not_found': 'הקוד לא נמצא או שפג תוקפו. בדקו את הקוד בטלוויזיה.',
+  'err.code': 'הקלידו את הקוד בן 6 הספרות שמופיע בטלוויזיה.',
+  'err.rate_limited': 'יותר מדי ניסיונות. חכו רגע.',
+  'err.busy': 'הקלדת קודים מושהית לכמה דקות. סרקו את קוד ה-QR במקום.',
+  'err.expired': 'קוד הטלוויזיה פג. התחילו מחדש.',
+  'err.network': 'בעיית רשת. בדקו את החיבור ל-Wi-Fi.',
+  'emoji.0': 'כלב',
+  'emoji.1': 'חתול',
+  'emoji.2': 'שועל',
+  'emoji.3': 'צפרדע',
+  'emoji.4': 'קוף',
+  'emoji.5': 'פנדה',
+  'emoji.6': 'אריה',
+  'emoji.7': 'חזיר',
+  'emoji.8': 'פיצה',
+  'emoji.9': 'תות',
+  'emoji.10': 'בננה',
+  'emoji.11': 'טיל',
+  'emoji.12': 'כדור',
+  'emoji.13': 'קשת',
+  'emoji.14': 'בלון',
+  'emoji.15': 'כוכב',
+};
+
+const ar: Record<TextKey, string> = {
+  'tv.getting_ready': 'نستعد…',
+  'tv.preparing_code': 'نجهّز رمزاً للهاتف.',
+  'tv.title': 'هيا نلعب! وصّلوا هاتفاً 📱',
+  'tv.scan': 'امسحوا بكاميرا الهاتف',
+  'tv.or_open': 'أو افتحوا {url} واكتبوا:',
+  'tv.phone_will_show': 'سيظهر في الهاتف:',
+  'tv.waiting': 'بانتظار الهاتف…',
+  'tv.phone_found': 'تم العثور على الهاتف! نشغّل الكاميرا…  (OK لرمز جديد)',
+  'tv.connecting': 'نتصل…',
+  'tv.language_hint': '◀ ▶  اللغة',
+  'tv.unsupported_title': '😕 متصفح التلفاز لا يستطيع استقبال كاميرا الهاتف',
+  'tv.unsupported_body': 'تحتاج الألعاب إلى فيديو مباشر من الهاتف (WebRTC). أرسلوا لنا نتائج الفحص أدناه.',
+  'tv.setup_needed': 'يلزم الإعداد',
+  'tv.offline': 'نتصل بالإنترنت…',
+  'tv.error': 'حدث خطأ ما',
+  'tv.not_connected_title': 'لم يتصل الهاتف',
+  'tv.not_connected_body': 'تحققوا من الرسالة في الهاتف، ثم اضغطوا OK لرمز جديد.',
+  'tv.expired_title': 'انتهت صلاحية الرمز',
+  'tv.expired_body': 'اضغطوا OK في جهاز التحكم للحصول على رمز جديد.',
+  'tv.cannot_connect': 'تعذّر الاتصال',
+  'tv.no_route_title': 'تعذّر الاتصال بالهاتف',
+  'tv.no_route_body': 'تأكدوا أن الهاتف والتلفاز على نفس شبكة Wi-Fi، ثم اضغطوا OK.',
+  'tv.not_lan_title': 'الهاتف ليس على شبكة Wi-Fi هذه',
+  'tv.not_lan_body': 'حفاظاً على السلامة، تعمل الكاميرا فقط على نفس الشبكة المنزلية.',
+  'tv.stopped_title': 'أوقف الهاتف الكاميرا',
+  'tv.stopped_body': 'اضغطوا OK للاتصال من جديد.',
+  'tv.lost_title': 'انقطع الاتصال بالهاتف',
+  'tv.lost_body': 'تأكدوا أن الهاتف يعمل وعلى نفس شبكة Wi-Fi، ثم اضغطوا OK.',
+  'tv.reconnecting': 'انقطع الاتصال بالهاتف — ننتظر…',
+  'btn.try_again': 'حاولوا مجدداً',
+  'btn.new_code': 'رمز جديد',
+  'btn.connect_again': 'الاتصال من جديد',
+  'fit.no-body': 'قفوا أمام الكاميرا',
+  'fit.head-cut': 'ارجعوا خطوة صغيرة لأرى رؤوسكم',
+  'fit.too-close': 'ارجعوا خطوة لأرى البطن والأرجل',
+  'fit.feet-cut': 'خطوة صغيرة أخرى إلى الوراء — لا أرى أقدامكم',
+  'fit.too-far': 'اقتربوا قليلاً',
+  'fit.ok': 'ممتاز! ابقوا هناك…',
+  'setup.space': 'أفسحوا مكاناً حولكم 🧸',
+  'hint.sound': '🔊 اضغطوا OK في جهاز التحكم لتشغيل الصوت',
+  'hint.skip': 'اضغطوا OK في جهاز التحكم للعب على أي حال',
+  'menu.title': 'ارفعوا أيديكم نحو لعبة لتلعبوا!',
+  'menu.remote': 'جهاز التحكم: OK = العب  ·  ▼ = فحص التلفاز',
+  'game.tickle': 'دغدغة الفقاعات',
+  'tickle.intro': 'دغدغوا الفقاعات! 🤗',
+  'tickle.finale': 'عاصفة الضحك!',
+  'tickle.away': 'إلى أين ذهبتم؟ عودوا! 👀',
+  'tickle.great': 'دغدغة رائعة!',
+  'tickle.popped': 'الفقاعات التي فرقعتموها: {n}',
+  'tickle.back_soon': 'نعود إلى الألعاب بعد لحظة…',
+  'tickle.giggle1': 'هي!',
+  'tickle.giggle2': 'هي هي!',
+  'tickle.giggle3': 'ها ها ها!',
+  'tickle.wheee': 'ويييي!',
+  'tickle.achoo': 'أتشوو!',
+  'tickle.morning': 'صباح الخير!',
+  'ph.no_camera_title': 'الكاميرا غير متاحة',
+  'ph.in_app': 'فُتح الموقع داخل تطبيق آخر. افتحوا الرابط في Chrome أو Safari.',
+  'ph.open_https': 'افتحوا الصفحة في Chrome أو Safari عبر رابط https://.',
+  'ph.connect_title': 'الاتصال بالتلفاز 📺',
+  'ph.connect_body': 'افتحوا اللعبة في التلفاز واكتبوا الرمز الظاهر فيه.',
+  'ph.in_app_tip': 'نصيحة: لكي تعمل الكاميرا، افتحوا الرابط في Chrome أو Safari.',
+  'ph.connect': 'اتصال',
+  'ph.finding': 'نبحث عن التلفاز…',
+  'ph.confirm_title': 'هل هذا تلفازكم؟',
+  'ph.tv_should_show': 'يجب أن يظهر في التلفاز:',
+  'ph.privacy': '🔒 ينتقل فيديو الكاميرا مباشرة إلى التلفاز عبر شبكة Wi-Fi المنزلية. لا يتم رفعه أو تسجيله.',
+  'ph.placement': '📐 ضعوا الهاتف بالعرض، على بعد 2–3 أمتار من مكان اللعب، والكاميرا الخلفية موجهة نحو الطفل.',
+  'ph.yes': 'نعم — شغّلوا الكاميرا',
+  'ph.no': 'لا، هذا ليس تلفازي',
+  'ph.cancelled': 'تم الإلغاء. تحققوا من الرمز في التلفاز وحاولوا مجدداً.',
+  'ph.not_connected': 'غير متصل',
+  'ph.starting_camera': 'نشغّل الكاميرا…',
+  'ph.connecting_tv': 'نتصل بالتلفاز…',
+  'ph.cellular': 'يستخدم الهاتف بيانات الجوال. وصّلوه بشبكة Wi-Fi المنزلية (نفس شبكة التلفاز) وحاولوا مجدداً.',
+  'ph.no_route': 'تعذّر الوصول إلى التلفاز. تأكدوا أن الهاتف والتلفاز على نفس شبكة Wi-Fi.',
+  'ph.not_lan': 'حفاظاً على السلامة، تعمل الكاميرا فقط عندما يكون الهاتف والتلفاز على نفس شبكة Wi-Fi المنزلية.',
+  'ph.tv_left': 'انقطع اتصال التلفاز.',
+  'ph.lost': 'انقطع الاتصال بالتلفاز.',
+  'ph.live_title': '📷 الكاميرا تعمل',
+  'ph.live_body': 'انظروا إلى التلفاز! أبقوا الهاتف ثابتاً وموصولاً بالشاحن.',
+  'ph.starting': 'نبدأ…',
+  'ph.loading_tracking': 'نحمّل تتبّع الجسم…',
+  'ph.tracking_failed': 'تعذّر بدء تتبّع الجسم: {msg}',
+  'ph.tracking': 'تتبّع {fps} إطاراً في الثانية',
+  'ph.switch_camera': 'تبديل الكاميرا',
+  'ph.stop': 'إيقاف',
+  'ph.stopped_title': 'تم الإيقاف',
+  'ph.stopped_body': 'الكاميرا مطفأة.',
+  'cam.blocked': 'تم حظر إذن الكاميرا. اسمحوا بالكاميرا لهذا الموقع في إعدادات المتصفح ثم أعيدوا التحميل.',
+  'cam.not_found': 'لم يتم العثور على كاميرا مناسبة في الهاتف.',
+  'cam.busy': 'الكاميرا مشغولة. أغلقوا التطبيقات الأخرى التي تستخدم الكاميرا وحاولوا مجدداً.',
+  'cam.failed': 'تعذّر تشغيل الكاميرا.',
+  'err.not_found': 'الرمز غير موجود أو انتهت صلاحيته. تحققوا من الرمز في التلفاز.',
+  'err.code': 'اكتبوا الرمز المكوّن من 6 أرقام الظاهر في التلفاز.',
+  'err.rate_limited': 'محاولات كثيرة جداً. انتظروا قليلاً.',
+  'err.busy': 'كتابة الرموز متوقفة لبضع دقائق. امسحوا رمز QR بدلاً من ذلك.',
+  'err.expired': 'انتهت صلاحية رمز التلفاز. ابدؤوا من جديد.',
+  'err.network': 'مشكلة في الشبكة. تحققوا من اتصال Wi-Fi.',
+  'emoji.0': 'كلب',
+  'emoji.1': 'قطة',
+  'emoji.2': 'ثعلب',
+  'emoji.3': 'ضفدع',
+  'emoji.4': 'قرد',
+  'emoji.5': 'باندا',
+  'emoji.6': 'أسد',
+  'emoji.7': 'خنزير',
+  'emoji.8': 'بيتزا',
+  'emoji.9': 'فراولة',
+  'emoji.10': 'موزة',
+  'emoji.11': 'صاروخ',
+  'emoji.12': 'كرة',
+  'emoji.13': 'قوس قزح',
+  'emoji.14': 'بالون',
+  'emoji.15': 'نجمة',
+};
+
+const TABLES: Record<Lang, Record<TextKey, string>> = { en, he, ar };
+const STORAGE_KEY = 'lang';
+
+export function isLang(v: unknown): v is Lang {
+  return v === 'he' || v === 'ar' || v === 'en';
+}
+
+function readStoredLang(): Lang {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    return isLang(v) ? v : DEFAULT_LANG;
+  } catch (_e) {
+    return DEFAULT_LANG;
+  }
+}
+
+let current: Lang = typeof localStorage !== 'undefined' ? readStoredLang() : DEFAULT_LANG;
+const listeners: Array<(lang: Lang) => void> = [];
+
+export function getLang(): Lang {
+  return current;
+}
+
+export function isRtl(lang: Lang = current): boolean {
+  return lang !== 'en';
+}
+
+/** Changes the language, remembers it on this device and notifies listeners. */
+export function setLang(lang: Lang): void {
+  if (!isLang(lang) || lang === current) return;
+  current = lang;
+  try {
+    localStorage.setItem(STORAGE_KEY, lang);
+  } catch (_e) {
+    // storage unavailable
+  }
+  applyDocumentLang();
+  for (const fn of listeners) fn(lang);
+}
+
+/** Subscribes to language changes; returns a function that unsubscribes. */
+export function onLangChange(fn: (lang: Lang) => void): () => void {
+  listeners.push(fn);
+  return () => {
+    const i = listeners.indexOf(fn);
+    if (i >= 0) listeners.splice(i, 1);
+  };
+}
+
+/** Sets <html lang/dir> so DOM screens lay out right-to-left for Hebrew and Arabic. */
+export function applyDocumentLang(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = current;
+  document.documentElement.dir = isRtl() ? 'rtl' : 'ltr';
+}
+
+export function t(key: TextKey, vars?: Record<string, string | number>): string {
+  let s = TABLES[current][key] || en[key] || key;
+  if (vars) for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k]));
+  return s;
+}
+
+/** Localized message for a pairing-service error code (falls back to the server text). */
+export function apiErrorText(code: string, fallback: string): string {
+  const map: Record<string, TextKey> = {
+    not_found: 'err.not_found',
+    bad_request: 'err.code',
+    rate_limited: 'err.rate_limited',
+    busy: 'err.busy',
+    expired: 'err.expired',
+    network: 'err.network',
+  };
+  return map[code] ? t(map[code]) : fallback;
+}
+
+/** The two pairing pictures with their names in the current language. */
+export function emojiText(pair: [number, number]): { symbols: string; names: string } {
+  const a = pair[0] >= 0 && pair[0] < EMOJI.length ? pair[0] : 0;
+  const b = pair[1] >= 0 && pair[1] < EMOJI.length ? pair[1] : 1;
+  const name = (i: number) => t(('emoji.' + i) as TextKey);
+  return { symbols: EMOJI[a] + ' ' + EMOJI[b], names: name(a) + ' + ' + name(b) };
+}

@@ -194,3 +194,25 @@ p {
   padding: 1vh 2vw;
   z-index: 10;
 }
+.langs {
+  font-size: 2.4vh;
+}
+.lang {
+  font-size: 2.4vh;
+  margin: 0 0.6vw;
+  padding: 0.6vh 1.6vh;
+  border-radius: 3vh;
+  border: 0.25vh solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #f4f6ff;
+}
+.lang.active {
+  background: #ffd600;
+  border-color: #ffd600;
+  color: #0b1020;
+  font-weight: 700;
+}
+.lang-hint {
+  margin: 0 1vw;
+  opacity: 0.6;
+}

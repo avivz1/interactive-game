@@ -1,3 +1,5 @@
+import { t } from '../shared/i18n';
+
 export type Facing = 'environment' | 'user';
 
 export function openCamera(facing: Facing): Promise<MediaStream> {
@@ -17,15 +19,15 @@ export function cameraErrorMessage(err: unknown): string {
   switch (name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Camera permission was blocked. Allow the camera for this site in the browser settings, then reload.';
+      return t('cam.blocked');
     case 'NotFoundError':
     case 'OverconstrainedError':
-      return 'No suitable camera was found on this phone.';
+      return t('cam.not_found');
     case 'NotReadableError':
     case 'AbortError':
-      return 'The camera is busy. Close other apps that use the camera and try again.';
+      return t('cam.busy');
     default:
-      return 'Could not start the camera.';
+      return t('cam.failed');
   }
 }
 

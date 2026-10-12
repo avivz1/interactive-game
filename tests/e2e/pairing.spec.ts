@@ -9,16 +9,27 @@ interface TvDebug {
   scene: string;
 }
 
-async function openTv(browser: Browser, path = '/tv/'): Promise<Page> {
+/** Most tests read English texts; the app itself defaults to Hebrew. */
+const english = () => {
+  try {
+    localStorage.setItem('lang', 'en');
+  } catch {
+    // ignore
+  }
+};
+
+async function openTv(browser: Browser, path = '/tv/', lang: 'en' | 'default' = 'en'): Promise<Page> {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  if (lang === 'en') await ctx.addInitScript(english);
   const tv = await ctx.newPage();
   await tv.goto(path);
   await expect(tv.getByTestId('pair-code')).toHaveText(/^\d{3} \d{3}$/, { timeout: 15_000 });
   return tv;
 }
 
-async function openPhone(browser: Browser, path: string): Promise<Page> {
+async function openPhone(browser: Browser, path: string, lang: 'en' | 'default' = 'en'): Promise<Page> {
   const ctx = await browser.newContext({ permissions: ['camera'], viewport: { width: 390, height: 844 } });
+  if (lang === 'en') await ctx.addInitScript(english);
   const phone = await ctx.newPage();
   await phone.goto(path);
   return phone;
@@ -138,4 +149,28 @@ test('setup leads to the menu, a full Tickle Pop round, and back', async ({ brow
   await expect.poll(() => debugValue(tv, 'ended'), { timeout: 20_000 }).toBe(true);
   expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
   await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
+});
+
+test('Hebrew by default, and the language chosen on the phone reaches the TV', async ({ browser }) => {
+  const tv = await openTv(browser, '/tv/', 'default');
+  expect(await tv.evaluate(() => document.documentElement.dir)).toBe('rtl');
+  await expect(tv.locator('h1.title')).toHaveText(/בואו נשחק/);
+
+  // ◀ ▶ on the remote switches the TV language on the pairing screen.
+  await tv.keyboard.press('ArrowRight');
+  await expect(tv.locator('h1.title')).toHaveText(/هيا نلعب/);
+  await tv.keyboard.press('ArrowLeft');
+  await expect(tv.locator('h1.title')).toHaveText(/בואו נשחק/);
+
+  const code = (await tv.getByTestId('pair-code').textContent())!.replace(/\D/g, '');
+  const phone = await openPhone(browser, '/phone/?pose=synthetic', 'default');
+  await expect(phone.locator('h1')).toHaveText(/מתחברים לטלוויזיה/);
+  await phone.getByTestId('code-input').fill(code);
+  await phone.getByTestId('join').click();
+  await phone.getByTestId('confirm-yes').click();
+  await expectStreaming(tv);
+
+  await phone.locator('[data-lang="en"]').click();
+  await expect(phone.getByTestId('live')).toHaveText(/Camera is on/);
+  await expect.poll(() => debugValue(tv, 'lang')).toBe('en');
 });

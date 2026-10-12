@@ -3,6 +3,14 @@
 import { RTC_CONFIG, preferH264, waitForIceGathering } from '../shared/rtc';
 import { checkRemoteSdp, stripGlobalIPv6 } from '../shared/sdp';
 
+/** The offer points outside the local network, so the camera must not be sent. */
+export class NotLocalError extends Error {
+  constructor(reason: string) {
+    super('Not a local-network TV (' + reason + ')');
+    this.name = 'NotLocalError';
+  }
+}
+
 const MAX_BITRATE = 2_500_000;
 const MAX_LONG_SIDE = 960;
 
@@ -31,7 +39,7 @@ export class Sender {
   /** Answers the TV's offer; refuses offers from devices outside the local network. */
   async answer(offer: string): Promise<string> {
     const checked = checkRemoteSdp(offer);
-    if (!checked.ok) throw new Error('For safety, the camera only works with a TV on your home Wi-Fi (' + checked.reason + ').');
+    if (!checked.ok) throw new NotLocalError(checked.reason);
     await this.pc.setRemoteDescription({ type: 'offer', sdp: checked.sdp });
     const tr = this.pc.getTransceivers().find((t) => t.receiver.track && t.receiver.track.kind === 'video');
     if (!tr) throw new Error('The TV did not ask for video.');

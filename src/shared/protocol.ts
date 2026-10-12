@@ -79,6 +79,7 @@ export type CtlMessage =
   | { t: 'ping'; id: number; tv: number }
   | { t: 'pong'; id: number; tv: number; ph: number }
   | { t: 'stats'; fps: number; inferMs: number; model?: 'lite' | 'full' }
+  | { t: 'lang'; lang: 'he' | 'ar' | 'en' }
   | { t: 'bye' };
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && isFinite(v);
@@ -108,6 +109,8 @@ export function parseCtl(raw: unknown): CtlMessage | null {
       const model = m.model === 'lite' || m.model === 'full' ? m.model : undefined;
       return model ? { t: 'stats', fps: m.fps, inferMs: m.inferMs, model } : { t: 'stats', fps: m.fps, inferMs: m.inferMs };
     }
+    case 'lang':
+      return m.lang === 'he' || m.lang === 'ar' || m.lang === 'en' ? { t: 'lang', lang: m.lang } : null;
     case 'bye':
       return { t: 'bye' };
     default:

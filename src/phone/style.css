@@ -74,7 +74,7 @@ form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left;
+  text-align: start;
   background: #141c38;
   border-radius: 14px;
   padding: 12px 14px;
@@ -88,4 +88,23 @@ form {
   object-fit: contain;
   background: #000;
   border-radius: 14px;
+}
+.langs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.lang {
+  font-size: 15px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #3a4a80;
+  background: transparent;
+  color: #f4f6ff;
+}
+.lang.active {
+  background: #ffd600;
+  border-color: #ffd600;
+  color: #0b1020;
+  font-weight: 700;
 }

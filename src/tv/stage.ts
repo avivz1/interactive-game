@@ -3,6 +3,7 @@
 
 import type { Body } from '../shared/body';
 import { h, mount } from '../shared/dom';
+import { isRtl, onLangChange, t } from '../shared/i18n';
 import type { Landmark } from '../shared/landmarks';
 import { containRect, type Rect } from '../shared/mapping';
 import type { Sound } from './audio';
@@ -80,13 +81,22 @@ export class Stage {
   private lastDebug = 0;
   private disposed = false;
   private readonly onKeyDown: (e: KeyboardEvent) => void;
+  private readonly offLang: () => void;
 
   constructor(root: HTMLElement, session: LiveSession, sound: Sound) {
     this.session = session;
     this.sound = sound;
     this.canvas = h('canvas', { class: 'live-canvas' });
-    this.banner = h('div', { class: 'banner hidden', text: 'Phone connection lost — waiting…' });
+    this.banner = h('div', { class: 'banner hidden', text: t('tv.reconnecting') });
     mount(root, h('div', { class: 'live', testid: 'live' }, session.video, this.canvas, this.banner));
+    const applyLang = () => {
+      // canvas text uses the element's direction for Hebrew/Arabic
+      this.canvas.setAttribute('dir', isRtl() ? 'rtl' : 'ltr');
+      this.banner.textContent = t('tv.reconnecting');
+      this.debug({ lang: document.documentElement.lang });
+    };
+    applyLang();
+    this.offLang = onLangChange(applyLang);
     this.ctx = this.canvas.getContext('2d');
     this.onKeyDown = (e: KeyboardEvent) => {
       sound.unlock();
@@ -159,6 +169,7 @@ export class Stage {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     document.removeEventListener('keydown', this.onKeyDown);
+    this.offLang();
     if (this.scene && this.scene.exit) this.scene.exit();
     this.scene = null;
     this.sound.stopMusic();

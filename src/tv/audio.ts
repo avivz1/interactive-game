@@ -2,7 +2,15 @@
 // music loop, on Web Audio. Browsers start audio suspended until a user
 // gesture, so unlock() runs on the first remote key press or click.
 
+import { getLang, onLangChange, type Lang } from '../shared/i18n';
 import { SAMPLES, type SampleDef, type SampleName } from './sounds';
+
+/** Spoken instructions, recorded per language under /voice/<lang>/<key>.mp3 (see scripts/voice-lines.json). */
+export const VOICE_KEYS = ['stand', 'head', 'close', 'feet', 'far', 'ok', 'space', 'menu', 'tickle', 'finale', 'away', 'sleepy', 'great'] as const;
+export type VoiceKey = (typeof VOICE_KEYS)[number];
+
+/** Music volume while a voice line plays. */
+const DUCKED = 0.3;
 
 type Ctx = AudioContext;
 
@@ -25,6 +33,11 @@ export class Sound {
   private musicNext = 0;
   private samples: Partial<Record<SampleName, LoadedSample[]>> = {};
   private voices = 0;
+  private music: GainNode | null = null;
+  private voiceLines: Partial<Record<VoiceKey, AudioBuffer>> = {};
+  private voiceLang: Lang | null = null;
+  private speaking: AudioBufferSourceNode | null = null;
+  private lastSpoken: Partial<Record<VoiceKey, number>> = {};
 
   constructor() {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -34,10 +47,75 @@ export class Sound {
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.8;
       this.master.connect(this.ctx.destination);
+      this.music = this.ctx.createGain();
+      this.music.connect(this.master);
     } catch (_e) {
       this.ctx = null;
     }
-    if (this.ctx) this.loadSamples();
+    if (this.ctx) {
+      this.loadSamples();
+      this.loadVoice(getLang());
+      onLangChange((lang) => this.loadVoice(lang));
+    }
+  }
+
+  private decode(url: string): Promise<AudioBuffer> {
+    const ctx = this.ctx as Ctx;
+    return fetch(url)
+      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error('HTTP ' + res.status))))
+      // callback form: old TV engines lack the promise version
+      .then((data) => new Promise<AudioBuffer>((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)));
+  }
+
+  /** Loads the spoken lines for a language (missing files are simply skipped). */
+  private loadVoice(lang: Lang): void {
+    if (!this.ctx || this.voiceLang === lang) return;
+    this.voiceLang = lang;
+    this.voiceLines = {};
+    for (const key of VOICE_KEYS) {
+      this.decode('/voice/' + lang + '/' + key + '.mp3')
+        .then((buffer) => {
+          if (this.voiceLang === lang) this.voiceLines[key] = buffer;
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * Speaks an instruction in the current language. A new line replaces the one
+   * playing; the same line is not repeated within minGapSec. Music dips meanwhile.
+   */
+  speak(key: VoiceKey, minGapSec = 4): void {
+    const ctx = this.ctx;
+    const buffer = this.voiceLines[key];
+    if (!ctx || !this.master || ctx.state !== 'running' || !buffer) return;
+    const now = ctx.currentTime;
+    const last = this.lastSpoken[key];
+    if (last !== undefined && now - last < minGapSec) return;
+    this.lastSpoken[key] = now;
+    if (this.speaking) {
+      try {
+        this.speaking.stop();
+      } catch (_e) {
+        // already stopped
+      }
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.master);
+    if (this.music) this.music.gain.setTargetAtTime(DUCKED, now, 0.08);
+    src.onended = () => {
+      if (this.speaking !== src) return;
+      this.speaking = null;
+      if (this.music && this.ctx) this.music.gain.setTargetAtTime(1, this.ctx.currentTime, 0.2);
+    };
+    this.speaking = src;
+    src.start(now + 0.01);
+  }
+
+  /** True while a voice line is playing. */
+  get isSpeaking(): boolean {
+    return this.speaking !== null;
   }
 
   /** Fetches and decodes the sample files; any that fail keep the synthesized sound. */
@@ -46,10 +124,7 @@ export class Sound {
     if (!ctx || typeof fetch !== 'function') return;
     (Object.keys(SAMPLES) as SampleName[]).forEach((name) => {
       for (const def of SAMPLES[name]) {
-        fetch(def.url)
-          .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error('HTTP ' + res.status))))
-          // callback form: old TV engines lack the promise version
-          .then((data) => new Promise<AudioBuffer>((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
+        this.decode(def.url)
           .then((buffer) => {
             const list = this.samples[name] || (this.samples[name] = []);
             list.push({ def, buffer });
@@ -100,7 +175,7 @@ export class Sound {
     if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
   }
 
-  private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number): OscillatorNode | null {
+  private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number, bus?: AudioNode | null): OscillatorNode | null {
     const ctx = this.ctx;
     if (!ctx || !this.master || ctx.state !== 'running') return null;
     const osc = ctx.createOscillator();
@@ -112,7 +187,7 @@ export class Sound {
     gain.gain.exponentialRampToValueAtTime(vol, at + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(gain);
-    gain.connect(this.master);
+    gain.connect(bus || this.master);
     osc.start(at);
     osc.stop(at + dur + 0.02);
     return osc;
@@ -226,8 +301,10 @@ export class Sound {
       while (this.musicNext < ctx.currentTime + 0.25) {
         const step = this.musicStep % 16;
         const note = pattern[step];
-        if (note >= 0) this.tone(PENTATONIC[note], this.musicNext, stepSec * 0.9, 'square', 0.035);
-        if (step % 4 === 0) this.tone(PENTATONIC[[0, 3, 4, 2][Math.floor(step / 4)]] / 4, this.musicNext, stepSec * 1.8, 'triangle', 0.12);
+        if (note >= 0) this.tone(PENTATONIC[note], this.musicNext, stepSec * 0.9, 'square', 0.035, undefined, this.music);
+        if (step % 4 === 0) {
+          this.tone(PENTATONIC[[0, 3, 4, 2][Math.floor(step / 4)]] / 4, this.musicNext, stepSec * 1.8, 'triangle', 0.12, undefined, this.music);
+        }
         this.musicNext += stepSec;
         this.musicStep++;
       }

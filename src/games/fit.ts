@@ -4,15 +4,6 @@ import { LM, type Landmark } from '../shared/landmarks';
 
 export type FitState = 'no-body' | 'head-cut' | 'too-close' | 'feet-cut' | 'too-far' | 'ok';
 
-export const FIT_HINTS: Record<FitState, string> = {
-  'no-body': 'Stand in front of the camera',
-  'head-cut': 'Step back a little so I can see your head',
-  'too-close': 'Step back so I can see your tummy and legs',
-  'feet-cut': 'Step back a little — I can’t see your feet',
-  'too-far': 'Come a little closer',
-  ok: 'Perfect! Stay there…',
-};
-
 /** Shoulder width as a share of the frame width below which the child is too far away. */
 const MIN_SHOULDER_WIDTH = 0.06;
 

@@ -44,31 +44,8 @@ export interface ApiErrorBody {
   message: string;
 }
 
-/** Shown on both screens so the adult can confirm the phone joined *their* TV. */
-export const EMOJI: ReadonlyArray<readonly [string, string]> = [
-  ['🐶', 'dog'],
-  ['🐱', 'cat'],
-  ['🦊', 'fox'],
-  ['🐸', 'frog'],
-  ['🐵', 'monkey'],
-  ['🐼', 'panda'],
-  ['🦁', 'lion'],
-  ['🐷', 'pig'],
-  ['🍕', 'pizza'],
-  ['🍓', 'strawberry'],
-  ['🍌', 'banana'],
-  ['🚀', 'rocket'],
-  ['⚽', 'ball'],
-  ['🌈', 'rainbow'],
-  ['🎈', 'balloon'],
-  ['⭐', 'star'],
-];
-
-export function emojiText(pair: [number, number]): { symbols: string; names: string } {
-  const a = EMOJI[pair[0]] ?? EMOJI[0];
-  const b = EMOJI[pair[1]] ?? EMOJI[1];
-  return { symbols: a[0] + ' ' + b[0], names: a[1] + ' + ' + b[1] };
-}
+/** Shown on both screens so the adult can confirm the phone joined *their* TV (names are in i18n). */
+export const EMOJI: ReadonlyArray<string> = ['🐶', '🐱', '🦊', '🐸', '🐵', '🐼', '🦁', '🐷', '🍕', '🍓', '🍌', '🚀', '⚽', '🌈', '🎈', '⭐'];
 
 export function formatCode(code: string): string {
   return code.slice(0, 3) + ' ' + code.slice(3);
