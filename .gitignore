@@ -8,3 +8,7 @@ playwright-report/
 .env*
 !.env.example
 *.tmp.mjs
+# compiled output from running tsc without --noEmit (sources are .ts)
+server/**/*.js
+src/**/*.js
+api/**/*.js
