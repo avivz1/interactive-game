@@ -59,8 +59,8 @@ shows `"ai":true`. Without it the game still works and names creatures itself.
 
 Optional:
 - `CREATURE_DAILY_CAP` — most AI calls per day for the whole site (default 2000,
-  about $2). Each TV address is also limited to 40 an hour.
-- `CREATURE_MODEL` — another Claude model id (default `claude-haiku-5-5`).
+  about $2; `0` turns the AI off). Each home is also limited to 40 an hour and
+  120 a day.
 - `IP_HASH_SECRET` (any long random string) for the rate-limit key salt; by
   default it is derived from the Upstash token.
 

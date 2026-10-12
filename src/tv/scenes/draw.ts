@@ -11,7 +11,7 @@ import { buildShape, fromImage, MIN_INK, Sheet, type Box, type ImageFit, type Sh
 import { DRAWING_IMAGE_SIZE, PERSONALITIES, type CreatureTraits } from '../../shared/creature-api';
 import { getLang, t } from '../../shared/i18n';
 import { askCreature } from '../creature-client';
-import { drawCreature, drawingPng, drawInk, heart, PEN_COLORS } from '../creature-art';
+import { drawCreature, drawingPng, drawInk, heart, InkLayer, PEN_COLORS } from '../creature-art';
 import { drawBody, drawGlove } from '../draw';
 import { Effects } from '../effects';
 import type { Frame, Key, Scene, Stage } from '../stage';
@@ -118,6 +118,9 @@ export class DrawScene implements Scene {
   // drawing
   private board: Box | null = null;
   private buttons: { done: Pt; clear: Pt; r: number } | null = null;
+  /** Line width, fixed while drawing so the cached ink stays valid. */
+  private lineW = 10;
+  private readonly ink = new InkLayer();
   private readonly doneDwell = new Dwell(BUTTON_HOLD_MS);
   private readonly clearDwell = new Dwell(BUTTON_HOLD_MS);
   private drawLeft: number;
@@ -145,6 +148,9 @@ export class DrawScene implements Scene {
   private hidden = false;
   private ground: number | null = null;
   private lastPetAt = -10;
+  /** The child's size for the creature: steady when they turn sideways (shoulders look narrow). */
+  private playUnit = 0;
+  private strokeColors: number[] = [];
 
   // end
   private result: { fun: number; stars: number } | null = null;
@@ -183,7 +189,8 @@ export class DrawScene implements Scene {
 
   onKey(key: Key): void {
     if (key === 'back') this.leave();
-    else if (key === 'ok' && this.phase === 'draw') this.tryFinish();
+    // the first OK may only be turning the sound on (the on-screen hint asks for it)
+    else if (key === 'ok' && this.phase === 'draw' && this.stage.sound.ready) this.tryFinish();
     else if (key === 'left' && this.phase === 'draw') this.startOver();
     else if (key === 'ok' && this.phase === 'end') this.leave();
   }
@@ -209,12 +216,28 @@ export class DrawScene implements Scene {
     const sy = (ls.y + rs.y) / 2;
     const r = Math.max(s * 0.55, rect.h * 0.07);
     const clampX = (x: number) => Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, x));
-    const by = Math.max(rect.y + rect.h * 0.02, sy - s * 1.5);
-    const target: Box = { x: cx - s * 1.4, y: by, w: s * 2.8, h: Math.min(rect.y + rect.h, sy + s * 0.65) - by };
-    target.x = Math.max(rect.x, Math.min(rect.x + rect.w - target.w, target.x));
     const btnY = Math.max(rect.y + r * 1.2, sy - s * 0.7);
     const done = { x: clampX(cx + s * 2.15), y: btnY };
     const clear = { x: clampX(cx - s * 2.15), y: btnY };
+    // The board fills the space between the buttons' hold zones (plus the inset
+    // where lines start), so reaching for a button never draws or presses by mistake.
+    const gap = r + s * 0.25 + s * 0.15;
+    let left = Math.max(rect.x, clear.x + gap);
+    let right = Math.min(rect.x + rect.w, done.x - gap);
+    const want = s * 2.8;
+    if (right - left > want) {
+      const mid = Math.max(left + want / 2, Math.min(right - want / 2, cx));
+      left = mid - want / 2;
+      right = mid + want / 2;
+    }
+    if (right - left < s * 0.8) {
+      // squeezed against a screen edge: keep a usable board even if it touches a button
+      left = cx - s * 0.4;
+      right = cx + s * 0.4;
+    }
+    const by = Math.max(rect.y + rect.h * 0.02, sy - s * 1.5);
+    const target: Box = { x: left, y: by, w: right - left, h: Math.min(rect.y + rect.h, sy + s * 0.65) - by };
+    this.lineW = Math.max(8, s * 0.11);
     if (!this.board || !this.buttons) {
       this.board = target;
       this.buttons = { done, clear, r };
@@ -230,6 +253,10 @@ export class DrawScene implements Scene {
     bt.done = { x: bt.done.x + (done.x - bt.done.x) * k, y: bt.done.y + (done.y - bt.done.y) * k };
     bt.clear = { x: bt.clear.x + (clear.x - bt.clear.x) * k, y: bt.clear.y + (clear.y - bt.clear.y) * k };
     bt.r += (r - bt.r) * k;
+  }
+
+  private syncSheetWidth(): void {
+    if (this.board && this.board.h > 0) this.sheet.width = this.board.w / this.board.h;
   }
 
   private toSheet(p: Pt): Pt {
@@ -259,7 +286,14 @@ export class DrawScene implements Scene {
 
   private finishDrawing(): void {
     this.sheet.liftAll();
+    if (this.sheet.ink() < MIN_INK) {
+      // the line in progress was mostly the hand rushing off the board
+      this.moreFor = 2.5;
+      this.stage.sound.speak('draw', 3);
+      return;
+    }
     this.strokes = this.sheet.strokes.map((s) => s.slice());
+    this.strokeColors = this.sheet.colors.slice();
     this.magicFor = 0;
     this.setPhase('magic');
     this.stage.sound.select();
@@ -347,6 +381,7 @@ export class DrawScene implements Scene {
     const { body, dt } = frame;
     this.place(frame);
     if (!this.board || !this.buttons) return;
+    this.syncSheetWidth();
     const s = body.shoulderWidth;
     for (let i = 0; i < 2; i++) {
       const hand = body.hands[i];
@@ -355,15 +390,19 @@ export class DrawScene implements Scene {
       const on = !!hand && this.onBoard(hand, this.sheet.isDrawing(i) ? s * 0.12 : -s * 0.15);
       this.sheet.update(i, hand ? this.toSheet(hand) : null, on, this.clock);
     }
-    const ink = this.sheet.ink();
-    if (!this.timerStarted && ink > 0) this.timerStarted = true;
+    if (!this.timerStarted && this.sheet.ink() > 0) this.timerStarted = true;
     if (this.timerStarted) this.drawLeft -= dt;
 
     const bt = this.buttons;
-    const near = (at: Pt) => body.hands.some((h) => !!h && distance(h, at) <= bt.r + s * 0.25);
-    if (this.clearDwell.update(near(bt.clear) && ink > 0, dt * 1000)) this.startOver();
+    // a hand that is drawing never presses a button
+    const near = (at: Pt) => body.hands.some((h, i) => !!h && !this.sheet.isDrawing(i) && distance(h, at) <= bt.r + s * 0.25);
+    if (this.clearDwell.update(near(bt.clear) && this.sheet.ink() > 0, dt * 1000)) {
+      this.startOver();
+      return;
+    }
     if (this.doneDwell.update(near(bt.done), dt * 1000)) this.tryFinish();
     if (this.phase !== 'draw') return;
+    const ink = this.sheet.ink();
 
     if (ink >= MIN_INK && this.enoughAt < 0) this.enoughAt = this.clock;
     // Once there is enough to bring alive, remind them how to finish.
@@ -425,14 +464,19 @@ export class DrawScene implements Scene {
     this.revealAge += dt;
     const la = body.points[27];
     const ra = body.points[28];
-    const feet = la && ra ? Math.max(la.y, ra.y) : la ? la.y : ra ? ra.y : rect.y + rect.h * 0.92;
+    const lower = la && ra ? (la.y > ra.y ? la : ra) : la || ra;
+    const feet = lower ? lower.y : rect.y + rect.h * 0.92;
     const target = Math.min(rect.y + rect.h * 0.97, Math.max(rect.y + rect.h * 0.5, feet));
     this.ground = this.ground === null ? target : this.ground + (target - this.ground) * Math.min(1, dt * 3);
     const ls = body.points[11];
     const rs = body.points[12];
     const center = ls && rs ? { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 } : null;
-    const events = c.update(dt, { left: rect.x, right: rect.x + rect.w, top: rect.y, ground: this.ground, unit: body.shoulderWidth }, { hands: body.hands, head: body.head, center });
-    for (const e of events) this.react(e, body.shoulderWidth);
+    // Shoulders look narrow when the child turns sideways: keep the largest recent
+    // width (slowly letting go), so the creature doesn't shrink and grow.
+    if (ls && rs) this.playUnit = this.playUnit ? Math.max(body.shoulderWidth, this.playUnit * (1 - 0.08 * dt)) : body.shoulderWidth;
+    const unit = this.playUnit || body.shoulderWidth;
+    const events = c.update(dt, { left: rect.x, right: rect.x + rect.w, top: rect.y, ground: this.ground, unit }, { hands: body.hands, head: body.head, center, feet: lower || null });
+    for (const e of events) this.react(e, unit);
   }
 
   private react(e: CreatureEvent, unit: number): void {
@@ -442,7 +486,8 @@ export class DrawScene implements Scene {
     const top = c.y - c.size * c.dims.h;
     switch (e.type) {
       case 'touch':
-        sound.giggle(1 + (e.count % 3), e.count);
+        // alternate a giggle and a big laugh (both always have a sample to play)
+        sound.giggle(e.count % 2 === 1 ? 1 : 3, e.count);
         if (this.clock - this.lastPetAt > 0.6) {
           // beside the creature, away from its name above
           const side = e.count % 2 === 0 ? 1 : -1;
@@ -472,7 +517,7 @@ export class DrawScene implements Scene {
       case 'land':
         break;
     }
-    if (e.type === 'touch' || e.type === 'jump' || e.type === 'boo') this.stage.debug({ fun: c.fun });
+    if (this.phase === 'play' && (e.type === 'touch' || e.type === 'jump' || e.type === 'boo')) this.stage.debug({ fun: c.fun });
   }
 
   render(ctx: CanvasRenderingContext2D, frame: Frame): void {
@@ -504,14 +549,14 @@ export class DrawScene implements Scene {
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.restore();
 
-    const lineW = Math.max(8, s * 0.11);
-    drawInk(ctx, this.sheet.strokes, this.toScreen, lineW);
-    drawInk(ctx, this.sheet.liveStrokes, this.toScreen, lineW, 0, this.sheet.strokes.length);
+    const lineW = this.lineW;
+    this.ink.draw(ctx, this.sheet.strokes, this.sheet.colors, this.toScreen, lineW, this.boardKey());
+    drawInk(ctx, this.sheet.liveStrokes, this.sheet.liveColors, this.toScreen, lineW);
     for (let i = 0; i < 2; i++) {
       const hand = body.hands[i];
       if (hand && this.sheet.isDrawing(i)) {
         drawGlove(ctx, hand, Math.max(18, s * 0.45));
-        ctx.fillStyle = PEN_COLORS[(this.sheet.strokes.length + i) % PEN_COLORS.length];
+        ctx.fillStyle = PEN_COLORS[this.sheet.colorOf(i) % PEN_COLORS.length];
         ctx.beginPath();
         ctx.arc(hand.x, hand.y, lineW * 0.8, 0, Math.PI * 2);
         ctx.fill();
@@ -552,12 +597,26 @@ export class DrawScene implements Scene {
   }
 
   private renderMagic(ctx: CanvasRenderingContext2D, frame: Frame): void {
-    const { width, height, body } = frame;
-    if (!this.board) return;
-    const shift = Math.floor(this.magicFor * 10);
-    const pulse = 1 + Math.sin(this.magicFor * 12) * 0.15;
-    drawInk(ctx, this.strokes, this.toScreen, Math.max(8, body.shoulderWidth * 0.11) * pulse, shift);
+    const { width, height } = frame;
+    const b = this.board;
+    if (!b) return;
+    // the cached drawing throbs (no re-stroking every frame on the TV)
+    const pulse = 1 + Math.sin(this.magicFor * 12) * 0.035;
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pulse, pulse);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = 0.85 + Math.sin(this.magicFor * 9) * 0.15;
+    this.ink.draw(ctx, this.strokes, this.strokeColors, this.toScreen, this.lineW, this.boardKey());
+    ctx.restore();
     label(ctx, t('draw.magic'), width / 2, height * 0.08, height * 0.06, '#ff9ecf');
+  }
+
+  private boardKey(): string {
+    const b = this.board;
+    return b ? Math.round(b.x) + ',' + Math.round(b.y) + ',' + Math.round(b.h) : '';
   }
 
   private renderPlay(ctx: CanvasRenderingContext2D, frame: Frame): void {
@@ -605,7 +664,7 @@ export class DrawScene implements Scene {
     // HUD: pets/jumps counter and time left
     const hud = height * 0.075;
     heart(ctx, width * 0.07, hud, height * 0.035, '#ff7eb6');
-    label(ctx, String(c.fun), width * 0.07 + height * 0.06, hud, height * 0.055, '#fff', 'left');
+    label(ctx, String(this.result ? this.result.fun : c.fun), width * 0.07 + height * 0.06, hud, height * 0.055, '#fff', 'left');
     if (this.phase === 'play') {
       ring(ctx, { x: width * 0.93, y: hud }, height * 0.04, Math.max(0, this.playLeft) / this.opts.playSec, '#7dffa1', height * 0.012);
       label(ctx, String(Math.max(0, Math.ceil(this.playLeft))), width * 0.93, hud, height * 0.035);

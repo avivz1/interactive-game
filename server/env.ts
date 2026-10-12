@@ -24,14 +24,22 @@ function ipSalt(env: NodeJS.ProcessEnv): string {
   return randomBytes(32).toString('hex'); // memory store: single process
 }
 
+/** CREATURE_DAILY_CAP: a whole number ≥ 0 (0 turns the AI off); unset or invalid means the default. */
+export function dailyCap(raw: string | undefined): number {
+  const n = raw !== undefined && raw.trim() !== '' ? Number(raw) : NaN;
+  if (isFinite(n) && n >= 0) return Math.floor(n);
+  if (raw !== undefined && raw.trim() !== '') console.warn('CREATURE_DAILY_CAP is not a number; using', CREATURE_LIMITS.dailyDefault);
+  return CREATURE_LIMITS.dailyDefault;
+}
+
 export function getDeps(): Deps {
   if (!cached) {
     cached = {
       store: createStore(process.env),
       now: Date.now,
       ipSalt: ipSalt(process.env),
-      ai: process.env.ANTHROPIC_API_KEY ? new ClaudeCreatureAI(process.env.ANTHROPIC_API_KEY, process.env.CREATURE_MODEL || undefined) : null,
-      aiDailyCap: Number(process.env.CREATURE_DAILY_CAP) > 0 ? Number(process.env.CREATURE_DAILY_CAP) : CREATURE_LIMITS.dailyDefault,
+      ai: process.env.ANTHROPIC_API_KEY ? new ClaudeCreatureAI(process.env.ANTHROPIC_API_KEY) : null,
+      aiDailyCap: dailyCap(process.env.CREATURE_DAILY_CAP),
     };
   }
   return cached;

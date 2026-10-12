@@ -19,27 +19,62 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: ReadonlyArray<Pt>, map: (
   }
 }
 
-/** Strokes on the board: a thick coloured line with a white core. */
+/** Strokes on the board: a thick line in its pen colour with a white core. */
 export function drawInk(
   ctx: CanvasRenderingContext2D,
   strokes: ReadonlyArray<ReadonlyArray<Pt>>,
+  colors: ReadonlyArray<number>,
   map: (p: Pt) => Pt,
   width: number,
-  colorShift = 0,
-  firstColor = 0,
 ): void {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   strokes.forEach((s, i) => {
     if (s.length < 2) return;
     tracePath(ctx, s, map);
-    ctx.strokeStyle = PEN_COLORS[(firstColor + i + colorShift) % PEN_COLORS.length];
+    ctx.strokeStyle = PEN_COLORS[(colors[i] || 0) % PEN_COLORS.length];
     ctx.lineWidth = width;
     ctx.stroke();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.lineWidth = width * 0.38;
     ctx.stroke();
   });
+}
+
+/**
+ * Finished strokes kept in an offscreen bitmap and redrawn only when they
+ * change, so a long drawing costs one drawImage per frame on the TV.
+ */
+export class InkLayer {
+  private canvas: HTMLCanvasElement | null = null;
+  private key = '';
+
+  draw(
+    ctx: CanvasRenderingContext2D,
+    strokes: ReadonlyArray<ReadonlyArray<Pt>>,
+    colors: ReadonlyArray<number>,
+    map: (p: Pt) => Pt,
+    width: number,
+    placeKey: string,
+  ): void {
+    if (strokes.length === 0) return;
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const key = placeKey + '|' + strokes.length + '|' + w + 'x' + h + '|' + width;
+    if (!this.canvas) this.canvas = document.createElement('canvas');
+    if (key !== this.key) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      const g = this.canvas.getContext('2d');
+      if (!g) {
+        drawInk(ctx, strokes, colors, map, width);
+        return;
+      }
+      drawInk(g, strokes, colors, map, width);
+      this.key = key;
+    }
+    ctx.drawImage(this.canvas, 0, 0);
+  }
 }
 
 /**

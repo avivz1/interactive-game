@@ -20,6 +20,8 @@ export interface CreatureAI {
 
 export const CREATURE_LIMITS = {
   perIp: { max: 40, windowSec: 3600 },
+  /** So one home (or one abuser) can't use up the whole site's daily budget. */
+  perIpDaily: { max: 120, windowSec: 24 * 3600 },
   /** Default number of AI calls per day for the whole site (about $0.001 each). */
   dailyDefault: 2000,
 } as const;
@@ -58,7 +60,9 @@ export async function makeCreature(
   if (!isCreatureLang(lang)) throw new ApiError(400, 'bad_request', 'Unknown language.');
   const png = readDrawing(body.image);
 
+  if (dailyCap <= 0) throw new ApiError(503, 'ai_not_configured', 'The creature AI is turned off (CREATURE_DAILY_CAP=0).');
   await rateLimit(ctx, 'creature', ctx.client, CREATURE_LIMITS.perIp.max, CREATURE_LIMITS.perIp.windowSec);
+  await rateLimit(ctx, 'creature-day', ctx.client, CREATURE_LIMITS.perIpDaily.max, CREATURE_LIMITS.perIpDaily.windowSec);
   const today = await ctx.store.incr(dayKey(ctx.now()), 2 * 24 * 3600);
   if (today > dailyCap) throw new ApiError(429, 'busy', 'The creature maker is resting for today.', 3600);
 

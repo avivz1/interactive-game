@@ -22,6 +22,8 @@ export interface Kid {
   head: Pt | null;
   /** Middle of the shoulders. */
   center: Pt | null;
+  /** The lower ankle (feet leave the floor in a real jump, not when standing up). */
+  feet?: Pt | null;
 }
 
 export type Mood = 'arrive' | 'roam' | 'follow' | 'happy' | 'hide' | 'sleep';
@@ -90,6 +92,7 @@ export class Creature {
   private headBase: number | null = null;
   private lastHeadY: number | null = null;
   private headVel = 0;
+  private feetBase: number | null = null;
   private jumpCooldown = 0;
   private handPrev: Array<Pt | null> = [null, null];
   /** Smoothed hand speeds (px/s): only a moving hand pets. */
@@ -180,7 +183,7 @@ export class Creature {
       this.quietFor = 0;
     } else if (this.mood !== 'sleep' && this.mood !== 'arrive') {
       this.quietFor += dt;
-      if (this.personality === 'sleepy' && this.quietFor > SLEEP_AFTER && !this.airborne) {
+      if (this.personality === 'sleepy' && this.quietFor > SLEEP_AFTER && (this.flies || !this.airborne)) {
         this.mood = 'sleep';
         events.push({ type: 'sleep' });
       }
@@ -201,10 +204,22 @@ export class Creature {
         this.headVel += (v - this.headVel) * Math.min(1, dt * 12);
       }
       this.lastHeadY = head.y;
-      // a slow-moving baseline: where the head is when standing
-      this.headBase = this.headBase === null ? head.y : this.headBase + (head.y - this.headBase) * Math.min(1, dt * 0.8);
+      // Where the head is when standing: it rises with the head fairly quickly but
+      // sinks only slowly, so standing up after crouching is not "above" it.
+      if (this.headBase === null) this.headBase = head.y;
+      else this.headBase += (head.y - this.headBase) * Math.min(1, dt * (head.y < this.headBase ? 0.8 : 0.1));
       const up = this.headBase - head.y;
-      if (up > unit * 0.3 && this.headVel < -unit * 1.6 && this.jumpCooldown === 0 && this.mood !== 'hide') {
+      // In a real jump the feet leave the floor too.
+      const feet = kid.feet || null;
+      let feetUp = true;
+      if (feet) {
+        if (this.feetBase === null) this.feetBase = feet.y;
+        feetUp = this.feetBase - feet.y > unit * 0.12;
+        this.feetBase += (feet.y - this.feetBase) * Math.min(1, dt * 1.5);
+      } else {
+        this.feetBase = null;
+      }
+      if (up > unit * 0.3 && feetUp && this.headVel < -unit * 1.6 && this.jumpCooldown === 0 && this.mood !== 'hide') {
         this.jumpCooldown = 0.9;
         this.fun++;
         this.quietFor = 0;

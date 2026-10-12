@@ -76,6 +76,40 @@ describe('drawing sheet', () => {
     expect(Math.max(...sheet.strokes[0].map((p) => p.y))).toBeLessThan(0.65);
   });
 
+  it('keeps a quick zigzag drawn in the middle of the board; only the straight exit is trimmed', () => {
+    const sheet = new Sheet();
+    sheet.width = 1.4;
+    // a fast zigzag right in the middle (not swooping in from the border) ...
+    const zig = Array.from({ length: 9 }, (_, i) => ({ x: 0.4 + i * 0.05, y: i % 2 ? 0.45 : 0.55 }));
+    zig.forEach((p, i) => sheet.update(0, p, true, i / 30));
+    // ... then straight off the board to the right
+    for (let i = 1; i <= 4; i++) sheet.update(0, { x: 0.8 + i * 0.07, y: 0.55 }, true, (8 + i) / 30);
+    sheet.update(0, { x: 3, y: 0.55 }, false, 13 / 30);
+    expect(sheet.strokes).toHaveLength(1);
+    const kept = sheet.strokes[0];
+    expect(kept[0].x).toBeCloseTo(0.4);
+    expect(kept[kept.length - 1].x).toBeLessThanOrEqual(0.81);
+    expect(kept.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('counts ink as if the hand left now, and gives each line its own pen colour', () => {
+    const sheet = new Sheet();
+    sheet.width = 1.4;
+    const line = (x0: number, x1: number, y: number) => Array.from({ length: 16 }, (_, i) => ({ x: x0 + ((x1 - x0) * i) / 15, y }));
+    drawPath(sheet, 0, line(0.3, 0.9, 0.5), 0.3);
+    const before = sheet.ink();
+    expect(before).toBeCloseTo(0.6, 2);
+    // rush on toward the border without leaving yet
+    for (let i = 1; i <= 3; i++) sheet.update(0, { x: 0.9 + i * 0.08, y: 0.5 }, true, 2 + i / 30);
+    expect(sheet.ink()).toBeLessThan(before + 0.1);
+    drawPath(sheet, 1, line(0.5, 0.7, 0.7), 0.3, 3);
+    expect(sheet.colorOf(0)).not.toBe(sheet.colorOf(1));
+    const c1 = sheet.colorOf(1);
+    sheet.liftAll();
+    expect(sheet.colors).toContain(c1);
+    expect(sheet.colors).toHaveLength(2);
+  });
+
   it('starts a new stroke after a tracking glitch instead of drawing a long line', () => {
     const sheet = new Sheet();
     drawPath(sheet, 0, [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.1 }, { x: 0.3, y: 0.1 }], 0.3);
@@ -142,6 +176,17 @@ describe('drawing shapes', () => {
     const shape = buildShape(stick)!;
     expect(shape.fills).toHaveLength(0);
     expect(shape.blob!.length).toBeGreaterThan(3);
+  });
+
+  it('puts the face on the body, not on a small drawn eye', () => {
+    // a round body drawn in two halves (not closed), plus two small closed eyes
+    const left = circle(0.6, 0.5, 0.3, 30, 0.5).map((p) => ({ x: p.x, y: p.y }));
+    const right = circle(0.6, 0.5, 0.3, 30, 0.5).map((p) => ({ x: 1.2 - p.x, y: 1 - p.y }));
+    const shape = buildShape([left, right, circle(0.5, 0.4, 0.045), circle(0.7, 0.4, 0.045)])!;
+    expect(shape.blob).not.toBeNull();
+    // centred on the body, between the drawn eyes
+    expect(Math.abs(shape.face.x)).toBeLessThan(0.1);
+    expect(shape.eyeR).toBeGreaterThan(0.06);
   });
 
   it('uses the AI face spot only when it lies on the drawing', () => {
@@ -211,6 +256,36 @@ describe('creature', () => {
     const events = run(c, 1.5, jumpKid, 2);
     expect(events.some((e) => e.type === 'jump')).toBe(true);
     expect(c.fun).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not count standing up after crouching as a jump', () => {
+    const c = new Creature('bouncy', 'walk', { x: 400, y: ARENA.ground }, 225, 6);
+    run(c, 2, standing);
+    const feet = { x: 640, y: ARENA.ground };
+    const crouchKid = (t: number): Kid => {
+      // crouch 1.5 units for 3 s, then stand up quickly
+      const down = t < 2.3 ? (t - 2) / 0.3 : t < 5.3 ? 1 : t < 5.7 ? 1 - (t - 5.3) / 0.4 : 0;
+      const dy = Math.max(0, Math.min(1, down)) * 1.5 * ARENA.unit;
+      return { hands: [null, null], head: { x: 640, y: 120 + dy }, center: { x: 640, y: 250 + dy }, feet };
+    };
+    const events = run(c, 5, crouchKid, 2);
+    expect(events.some((e) => e.type === 'jump')).toBe(false);
+  });
+
+  it('jumps along when the feet leave the floor too', () => {
+    const c = new Creature('bouncy', 'walk', { x: 400, y: ARENA.ground }, 225, 7);
+    run(c, 2, standing);
+    const jumpKid = (t: number): Kid => {
+      const up = t > 2.5 && t < 2.8 ? (t - 2.5) * 500 : t >= 2.8 && t < 3.1 ? (3.1 - t) * 500 : 0;
+      return { hands: [null, null], head: { x: 640, y: 120 - up }, center: { x: 640, y: 250 - up }, feet: { x: 640, y: ARENA.ground - up } };
+    };
+    expect(run(c, 1.5, jumpKid, 2).some((e) => e.type === 'jump')).toBe(true);
+  });
+
+  it('sleepy flying creatures fall asleep too', () => {
+    const c = new Creature('sleepy', 'fly', { x: 640, y: 300 }, 225, 8);
+    const events = run(c, 10, () => ({ hands: [null, null], head: { x: 640, y: 120 }, center: KID_CENTER }));
+    expect(events.some((e) => e.type === 'sleep')).toBe(true);
   });
 
   it('hides while the child covers their eyes and says boo after', () => {

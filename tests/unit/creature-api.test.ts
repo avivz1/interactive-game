@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CREATURE_LIMITS, readDrawing, type CreatureAI } from '../../server/creature';
+import { dailyCap } from '../../server/env';
 import { handle, type Deps } from '../../server/router';
 import { MemoryStore } from '../../server/store';
 import { PNG_DATA_PREFIX, type CreatureLang } from '../../src/shared/creature-api';
@@ -101,6 +102,30 @@ describe('POST /api/creature', () => {
     for (let i = 0; i <= CREATURE_LIMITS.perIp.max; i++) last = (await create({ lang: 'en', image: png(256, 256) })).status;
     expect(last).toBe(429);
     expect(ai.calls).toHaveLength(CREATURE_LIMITS.perIp.max);
+  });
+
+  it('limits calls per client per day', async () => {
+    deps = { ...deps, aiDailyCap: 10_000 };
+    let ok = 0;
+    for (let hour = 0; hour < 4; hour++) {
+      for (let i = 0; i < CREATURE_LIMITS.perIp.max; i++) if ((await create({ lang: 'en', image: png(256, 256) })).status === 200) ok++;
+      clock += 3600 * 1000;
+    }
+    expect(ok).toBe(CREATURE_LIMITS.perIpDaily.max);
+  });
+
+  it('CREATURE_DAILY_CAP=0 turns the AI off; bad values keep the default', async () => {
+    expect(dailyCap('0')).toBe(0);
+    expect(dailyCap('50.7')).toBe(50);
+    expect(dailyCap(undefined)).toBe(CREATURE_LIMITS.dailyDefault);
+    expect(dailyCap('')).toBe(CREATURE_LIMITS.dailyDefault);
+    expect(dailyCap('lots')).toBe(CREATURE_LIMITS.dailyDefault);
+    expect(dailyCap('-5')).toBe(CREATURE_LIMITS.dailyDefault);
+    expect(dailyCap('Infinity')).toBe(CREATURE_LIMITS.dailyDefault);
+    deps = { ...deps, aiDailyCap: 0 };
+    const res = await create({ lang: 'en', image: png(256, 256) });
+    expect(res.status).toBe(503);
+    expect(ai.calls).toHaveLength(0);
   });
 
   it('reports whether the AI key is set in /api/health', async () => {

@@ -24,13 +24,16 @@ export const MAX_STROKES = 60;
 /** Strokes shorter than this are dropped (a tap, not a line). */
 export const MIN_STROKE = 0.03;
 /**
- * Moving into and out of the board is quick; drawing is slower. A stroke only
- * starts once the hand slows down (up to ENTRY_SETTLE_SEC), and its fast tail
- * is trimmed when the hand leaves, so no stray lines lead to the edges.
+ * Moving onto and off the board is quick; drawing is slower. Near the border a
+ * stroke only starts once the hand slows down (up to ENTRY_SETTLE_SEC), and when
+ * the hand leaves the board the fast, straight tail is trimmed (up to
+ * EXIT_TRIM_SEC), so no stray lines lead to the edges.
  */
 export const EXIT_SPEED = 1.6;
 export const EXIT_TRIM_SEC = 0.45;
 export const ENTRY_SETTLE_SEC = 0.45;
+/** How close to the border (board heights) a line has to start to count as swooping in. */
+export const EDGE_ZONE = 0.25;
 /** Least total line length that makes a creature. */
 export const MIN_INK = 0.6;
 
@@ -44,18 +47,33 @@ export function pathLength(pts: ReadonlyArray<Pt>): number {
 
 /**
  * Drops the end of a stroke that was drawn while the hand rushed out of the
- * board (to the Done button or down to the side), at most EXIT_TRIM_SEC of it.
+ * board (to the Done button or down to the side): the fast, straight part of
+ * the tail, at most EXIT_TRIM_SEC of it. A sharp turn means drawing, so the
+ * trim stops there and quick curvy lines keep their shape.
  */
 export function trimExitTail<T extends TimedPt>(stroke: ReadonlyArray<T>): T[] {
   let end = stroke.length - 1;
   if (end < 1) return stroke.slice();
   const tEnd = stroke[end].t;
+  let dirX = 0;
+  let dirY = 0;
   while (end > 0) {
     const a = stroke[end - 1];
     const b = stroke[end];
     const dt = b.t - a.t;
-    const speed = dt > 0 ? dist(a, b) / dt : Infinity;
+    const step = dist(a, b);
+    const speed = dt > 0 ? step / dt : Infinity;
     if (speed < EXIT_SPEED || tEnd - a.t > EXIT_TRIM_SEC) break;
+    if (step > 0) {
+      const ux = (b.x - a.x) / step;
+      const uy = (b.y - a.y) / step;
+      if (dirX === 0 && dirY === 0) {
+        dirX = ux;
+        dirY = uy;
+      } else if (ux * dirX + uy * dirY < 0.5) {
+        break; // turned more than 60°: this is drawing, not leaving
+      }
+    }
     end--;
   }
   return stroke.slice(0, end + 1);
@@ -64,15 +82,26 @@ export function trimExitTail<T extends TimedPt>(stroke: ReadonlyArray<T>): T[] {
 /** The strokes being drawn, one pen per hand. */
 export class Sheet {
   readonly strokes: Pt[][] = [];
+  /** Pen colour number of each finished stroke. */
+  readonly colors: number[] = [];
+  /** The board's width in board heights (its height is 1). */
+  width = 1.2;
   private live: Array<TimedPt[] | null> = [null, null];
-  /** When the hand came onto the board, while it is still swooping in (null once it slows down). */
+  private liveColor = [0, 0];
+  private nextColor = 0;
+  /** When a line started near the border, while the hand is still swooping in (else null). */
   private entering: Array<number | null> = [null, null];
   private doneInk = 0;
+  private donePoints = 0;
 
   /** Feeds one hand's position (sheet units) for this frame. */
   update(hand: number, p: Pt | null, inside: boolean, t: number): void {
-    if (!p || !inside) {
-      this.lift(hand);
+    if (!p) {
+      this.lift(hand, false); // tracking lost: keep the line as drawn
+      return;
+    }
+    if (!inside) {
+      this.lift(hand); // left the board: trim the swoop out
       return;
     }
     const cur = this.live[hand];
@@ -99,7 +128,12 @@ export class Sheet {
     }
     if (this.strokes.length + this.liveCount() >= MAX_STROKES || this.pointCount() >= MAX_POINTS) return;
     this.live[hand] = [{ x: p.x, y: p.y, t }];
-    this.entering[hand] = t;
+    this.liveColor[hand] = this.nextColor++;
+    this.entering[hand] = this.nearEdge(p) ? t : null;
+  }
+
+  private nearEdge(p: Pt): boolean {
+    return p.x < EDGE_ZONE || p.y < EDGE_ZONE || p.x > this.width - EDGE_ZONE || p.y > 1 - EDGE_ZONE;
   }
 
   /** Ends a hand's stroke (trimming the fast exit tail unless told otherwise). */
@@ -107,41 +141,61 @@ export class Sheet {
     const cur = this.live[hand];
     if (!cur) return;
     this.live[hand] = null;
+    this.entering[hand] = null;
     const kept = trim ? trimExitTail(cur) : cur;
     if (kept.length < 2) return;
     const len = pathLength(kept);
     if (len < MIN_STROKE) return;
     this.strokes.push(kept.map((q) => ({ x: q.x, y: q.y })));
+    this.colors.push(this.liveColor[hand]);
     this.doneInk += len;
+    this.donePoints += kept.length;
   }
 
   liftAll(): void {
     for (let i = 0; i < this.live.length; i++) this.lift(i);
   }
 
-  /** Strokes still being drawn (for rendering). */
+  /** Strokes still being drawn, with their pen colours (for rendering). */
   get liveStrokes(): ReadonlyArray<ReadonlyArray<Pt>> {
     const out: TimedPt[][] = [];
     for (const s of this.live) if (s) out.push(s);
     return out;
   }
 
+  get liveColors(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < this.live.length; i++) if (this.live[i]) out.push(this.liveColor[i]);
+    return out;
+  }
+
+  /** The pen colour of a hand's line (its current one, or the next one it would start). */
+  colorOf(hand: number): number {
+    return this.live[hand] ? this.liveColor[hand] : this.nextColor;
+  }
+
   isDrawing(hand: number): boolean {
     return !!this.live[hand];
   }
 
-  /** Total line length so far, including strokes in progress. */
+  /** Total line length so far, counting lines in progress as if the hand left now. */
   ink(): number {
     let len = this.doneInk;
-    for (const s of this.live) if (s) len += pathLength(s);
+    for (const s of this.live) {
+      if (!s) continue;
+      const kept = pathLength(trimExitTail(s));
+      if (kept >= MIN_STROKE) len += kept;
+    }
     return len;
   }
 
   clear(): void {
     this.strokes.length = 0;
+    this.colors.length = 0;
     this.live = [null, null];
     this.entering = [null, null];
     this.doneInk = 0;
+    this.donePoints = 0;
   }
 
   private liveCount(): number {
@@ -151,8 +205,7 @@ export class Sheet {
   }
 
   private pointCount(): number {
-    let n = 0;
-    for (const s of this.strokes) n += s.length;
+    let n = this.donePoints;
     for (const s of this.live) if (s) n += s.length;
     return n;
   }
@@ -335,7 +388,8 @@ export function buildShape(strokes: ReadonlyArray<ReadonlyArray<Pt>>, face: Pt |
   let main = -1;
   const all: Pt[] = [];
   for (const s of strokes) {
-    const simple = simplify(s, 0.004);
+    // above hand-tracking jitter, so the outline keeps its shape, not every wobble
+    const simple = simplify(s, 0.008);
     const closed = isClosed(simple);
     const pts = smooth(simple, closed).map(norm);
     outStrokes.push(closed ? pts.concat([pts[0]]) : pts);
@@ -358,15 +412,27 @@ export function buildShape(strokes: ReadonlyArray<ReadonlyArray<Pt>>, face: Pt |
   const blobHull = hull(all);
   const blob = mainArea < width * height * 0.3 && blobHull.length >= 3 ? smooth(blobHull, true, 2) : null;
 
-  // The face: the AI's spot if it is on the drawing, else the upper middle of the main part.
-  const target = main >= 0 ? fills.filter((f) => f.main)[0].pts : blob || all;
-  const tb = bounds([target]) || { x: -width / 2, y: -height, w: width, h: height };
-  let facePt: Pt = { x: tb.x + tb.w / 2, y: tb.y + tb.h * 0.38 };
+  // The face: the AI's spot if it is on the drawing, else the upper middle of the
+  // body — the main closed part if it is big, otherwise the whole drawing.
+  const hullArea = blobHull.length >= 3 ? area(blobHull) : 0;
+  const bigMain = main >= 0 && mainArea >= hullArea * 0.3 ? fills.filter((f) => f.main)[0].pts : null;
+  const body = bigMain || blob || all;
+  let region = body;
+  let facePt: Pt | null = null;
   if (face) {
     const f = norm(face);
-    const onDrawing = (blob && inside(f, blob)) || fills.some((fl) => inside(f, fl.pts)) || inside(f, blobHull);
-    if (onDrawing) facePt = f;
+    // the smallest big-enough part the spot is on decides the eye size
+    const parts = fills.filter((fl) => area(fl.pts) >= hullArea * 0.15 && inside(f, fl.pts));
+    if (parts.length) {
+      facePt = f;
+      region = parts[parts.length - 1].pts;
+    } else if ((blob && inside(f, blob)) || inside(f, blobHull)) {
+      facePt = f;
+      region = blob || all;
+    }
   }
-  const eyeR = clamp(Math.min(tb.w, tb.h) * 0.11, 0.045, 0.11);
+  const rb = bounds([region]) || { x: -width / 2, y: -height, w: width, h: height };
+  if (!facePt) facePt = { x: rb.x + rb.w / 2, y: rb.y + rb.h * 0.38 };
+  const eyeR = clamp(Math.min(rb.w, rb.h) * 0.11, 0.045, 0.11);
   return { strokes: outStrokes, fills, blob, face: facePt, eyeR, width, height, box };
 }

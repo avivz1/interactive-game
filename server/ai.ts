@@ -5,6 +5,7 @@ import type { CreatureLang } from '../src/shared/creature-api.js';
 import { MOVES, PERSONALITIES } from '../src/shared/creature-api.js';
 import type { CreatureAI } from './creature.js';
 
+/** The request below (thinking off, effort low) is valid for this model. */
 export const CREATURE_MODEL = 'claude-haiku-5-5';
 
 const LANG_NAMES: Record<CreatureLang, string> = {
@@ -47,15 +48,16 @@ type AnthropicClient = import('@anthropic-ai/sdk').default;
 export class ClaudeCreatureAI implements CreatureAI {
   private client: Promise<AnthropicClient> | null = null;
 
-  constructor(
-    private readonly apiKey: string,
-    private readonly model = CREATURE_MODEL,
-  ) {}
+  constructor(private readonly apiKey: string) {}
 
   /** The SDK loads on the first drawing, so pairing requests never pay for it. */
   private getClient(): Promise<AnthropicClient> {
     if (!this.client) {
       this.client = import('@anthropic-ai/sdk').then((mod) => new mod.default({ apiKey: this.apiKey, timeout: 6000, maxRetries: 0 }));
+      // a failed load is retried on the next drawing instead of being remembered
+      this.client.catch(() => {
+        this.client = null;
+      });
     }
     return this.client;
   }
@@ -63,7 +65,7 @@ export class ClaudeCreatureAI implements CreatureAI {
   async describe(pngBase64: string, lang: CreatureLang): Promise<unknown> {
     const client = await this.getClient();
     const response = await client.messages.create({
-      model: this.model,
+      model: CREATURE_MODEL,
       max_tokens: 400,
       thinking: { type: 'disabled' },
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
