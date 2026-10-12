@@ -25,6 +25,8 @@ export interface Bubble {
   age: number;
   phase: number;
   touched: boolean;
+  /** A sleepy bubble resting at shin height. */
+  napping?: boolean;
 }
 
 export type GameEvent =
@@ -51,6 +53,8 @@ export interface Envelope {
   right: number;
   top: number;
   bottom: number;
+  /** Where the child's feet are (screen y), if tracked: sleepy bubbles nap just above them. */
+  floor?: number | null;
 }
 
 export interface TickleConfig {
@@ -106,10 +110,13 @@ export class TicklePop {
     const riseSpeed = (env.bottom - env.top) / (this.ended ? 2.5 : 7); // px per second
     for (const b of this.bubbles) {
       b.age += dt;
-      const napY = env.bottom - env.unit * 1.2;
-      if (b.kind === 'sleepy' && !this.ended && b.age < NAP_SEC && b.y <= napY) {
+      // shin height: just above the child's feet (or the bottom of the picture)
+      const napY = Math.min(env.bottom - env.unit * 0.6, (env.floor != null ? env.floor : env.bottom) - env.unit * 0.8);
+      if (b.kind === 'sleepy' && !this.ended && b.age < NAP_SEC && (b.napping || b.y <= napY)) {
+        b.napping = true;
         b.y = napY + Math.sin(b.age * 1.3 + b.phase) * env.unit * 0.08; // snoozing at shin height
       } else {
+        b.napping = false;
         b.y -= riseSpeed * dt * (b.kind === 'sleepy' ? 0.7 : 1);
       }
       b.x = b.baseX + Math.sin(b.age * 1.6 + b.phase) * env.unit * 0.15;

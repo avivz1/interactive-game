@@ -86,7 +86,10 @@ export class TickleScene implements Scene {
     const ls = frame.body.points[11];
     const rs = frame.body.points[12];
     const centerX = ls && rs ? (ls.x + rs.x) / 2 : body.head ? body.head.x : rect.x + rect.w / 2;
-    const env: Envelope = { centerX, unit, left: rect.x, right: rect.x + rect.w, top: rect.y, bottom: rect.y + rect.h };
+    const la = body.points[27];
+    const ra = body.points[28];
+    const floor = la && ra ? Math.max(la.y, ra.y) : la ? la.y : ra ? ra.y : null;
+    const env: Envelope = { centerX, unit, left: rect.x, right: rect.x + rect.w, top: rect.y, bottom: rect.y + rect.h, floor };
     // Only reaching hands and lifted feet tickle (never the head, the body, or
     // a hand hanging at the side).
     this.touchers = this.limbs.update(body, dt);

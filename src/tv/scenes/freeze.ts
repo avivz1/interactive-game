@@ -31,6 +31,8 @@ export class FreezeScene implements Scene {
   private readonly seed = Math.floor(Math.random() * 1000);
   /** The watching monster, beside the child on the roomier side. */
   private monster: { x: number; y: number; r: number; side: number } | null = null;
+  /** The child's size, steady when they turn sideways (shoulders look narrow then). */
+  private unit = 0;
 
   constructor(
     private readonly stage: Stage,
@@ -65,11 +67,14 @@ export class FreezeScene implements Scene {
 
   update(frame: Frame): void {
     const { dt, body } = frame;
-    const unit = body.shoulderWidth;
+    if (body.points[11] && body.points[12]) {
+      this.unit = this.unit ? Math.max(body.shoulderWidth, this.unit * (1 - 0.08 * dt)) : body.shoulderWidth;
+    }
+    const unit = this.unit || body.shoulderWidth;
     this.clock += dt;
     this.effects.update(dt, unit);
     const motion = this.meter.update(body.points, unit, dt);
-    this.place(frame);
+    this.place(frame, unit);
 
     if (this.result) {
       this.resultFor += dt;
@@ -94,9 +99,16 @@ export class FreezeScene implements Scene {
       this.paused = false;
       this.meter.reset(); // coming back into the picture is not a wiggle
       if (this.game.phase === 'dance') this.stage.sound.startMusic(this.seed, 'dance');
+      if (this.game.phase === 'freeze') {
+        // the freeze they missed starts over, with the cue again
+        this.game.restartCheck();
+        this.stage.sound.speak('freeze', 0);
+        this.show('fd.freeze', '#7ee0ff', this.game.checkLength);
+      }
     }
 
-    const events = this.game.update(dt, frame.hasBody ? motion : 0);
+    const delaySec = this.stage.session.stats.delayMs / 1000;
+    const events = this.game.update(dt, frame.hasBody ? motion : 0, delaySec);
     for (const e of events) this.react(e, unit);
 
     // sparkles where the child dances
@@ -123,7 +135,7 @@ export class FreezeScene implements Scene {
         sound.stopMusic(true);
         sound.ice();
         sound.speak('freeze', 0);
-        this.show('fd.freeze', '#7ee0ff', 3);
+        this.show('fd.freeze', '#7ee0ff', this.game.checkLength);
         this.stage.debug({ freezes: this.game.freezes });
         break;
       case 'statue':
@@ -148,12 +160,11 @@ export class FreezeScene implements Scene {
     }
   }
 
-  private place(frame: Frame): void {
+  private place(frame: Frame, s: number): void {
     const { body, rect, dt } = frame;
     const ls = body.points[11];
     const rs = body.points[12];
     if (!ls || !rs) return;
-    const s = body.shoulderWidth;
     const cx = (ls.x + rs.x) / 2;
     const sy = (ls.y + rs.y) / 2;
     // the critter's body is about half of r: roughly one shoulder width across

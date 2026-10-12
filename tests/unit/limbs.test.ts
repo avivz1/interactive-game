@@ -56,4 +56,23 @@ describe('limbs that may touch creatures', () => {
     expect(t.feet[0]).toBeNull();
     expect(t.feet[1]).not.toBeNull();
   });
+
+  it('stepping back (both feet rise in the picture) is not a kick', () => {
+    const limbs = new Limbs();
+    limbs.update(child(), 1 / 30);
+    const t = limbs.update(
+      child({ [LM.leftAnkle]: [0.56, 0.8], [LM.rightAnkle]: [0.44, 0.8], [LM.leftFootIndex]: [0.57, 0.83], [LM.rightFootIndex]: [0.43, 0.83] }),
+      1 / 30,
+    );
+    expect(t.feet).toEqual([null, null]);
+  });
+
+  it('standing with one foot forward is not a kick once it settles', () => {
+    const limbs = new Limbs();
+    limbs.update(child(), 1 / 30);
+    // the left foot steps back and stays there (higher in the picture)
+    let t = limbs.update(child({ [LM.leftAnkle]: [0.56, 0.84], [LM.leftFootIndex]: [0.57, 0.87] }), 1 / 30);
+    for (let i = 0; i < 90; i++) t = limbs.update(child({ [LM.leftAnkle]: [0.56, 0.84], [LM.leftFootIndex]: [0.57, 0.87] }), 1 / 30);
+    expect(t.feet).toEqual([null, null]);
+  });
 });

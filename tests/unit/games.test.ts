@@ -185,3 +185,20 @@ describe('menu layout with three games', () => {
     });
   }
 });
+
+describe('menu layout at the screen edge', () => {
+  it('never stacks bubbles when the child stands at the side of the picture', async () => {
+    const { menuLayout } = await import('../../src/tv/scenes/menu');
+    const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+    for (const cx of [60, 200, 1720, 1860])
+      for (const shoulderY of [180, 400]) {
+        const { r, at } = menuLayout(3, cx, shoulderY, 150, rect);
+        for (let i = 0; i < 3; i++)
+          for (let j = i + 1; j < 3; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+        for (const p of at) {
+          expect(p.x - r).toBeGreaterThanOrEqual(0);
+          expect(p.x + r).toBeLessThanOrEqual(1920);
+        }
+      }
+  });
+});

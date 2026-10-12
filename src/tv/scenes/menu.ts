@@ -76,6 +76,21 @@ export class MenuScene implements Scene {
     const shoulderY = ls && rs ? (ls.y + rs.y) / 2 : rect.y + rect.h * 0.35;
     const targets = menuLayout(this.tiles.length, cx, shoulderY, s, rect);
     const r = targets.r;
+    // each hand counts only for the nearest bubble it is over
+    const hovered = new Set<Tile>();
+    for (const hand of body.hands) {
+      if (!hand) continue;
+      let best: Tile | null = null;
+      let bestD = Infinity;
+      for (const tile of this.tiles) {
+        const d = distance(hand, tile.at);
+        if (tile.r > 0 && d <= tile.r + s * 0.2 && d < bestD) {
+          best = tile;
+          bestD = d;
+        }
+      }
+      if (best) hovered.add(best);
+    }
     this.tiles.forEach((t, i) => {
       const target = targets.at[i];
       if (t.r === 0) {
@@ -85,8 +100,7 @@ export class MenuScene implements Scene {
         t.at = { x: t.at.x + (target.x - t.at.x) * 0.08, y: t.at.y + (target.y - t.at.y) * 0.08 };
         t.r += (r - t.r) * 0.08;
       }
-      const hover = body.hands.some((hand) => !!hand && distance(hand, t.at) <= t.r + s * 0.2);
-      if (t.dwell.update(hover, frame.dt * 1000)) this.choose(t);
+      if (t.dwell.update(hovered.has(t), frame.dt * 1000)) this.choose(t);
     });
   }
 
@@ -96,10 +110,13 @@ export class MenuScene implements Scene {
       const cur = this.tiles[this.focus].at;
       let best = -1;
       let bestD = Infinity;
+      const r = this.tiles[this.focus].r;
       this.tiles.forEach((tile, i) => {
         const dx = tile.at.x - cur.x;
-        if (i === this.focus || (key === 'left' ? dx >= 0 : dx <= 0)) return;
-        const d = Math.abs(dx) + Math.abs(tile.at.y - cur.y) * 0.5;
+        // a bubble stacked right below or above (against a screen edge) is reachable both ways
+        const stacked = Math.abs(dx) < r * 0.5;
+        if (i === this.focus || (!stacked && (key === 'left' ? dx >= 0 : dx <= 0))) return;
+        const d = Math.abs(dx) + Math.abs(tile.at.y - cur.y) * 0.5 + (stacked ? r : 0);
         if (d < bestD) {
           bestD = d;
           best = i;
@@ -146,7 +163,8 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
   const at: Pt[] = [];
   for (let i = 0; i < n; i++) {
     const a = ((n - 1) / 2 - i) * step;
-    const side = a > 0 ? 1 : a < 0 ? -1 : i % 2 === 0 ? 1 : -1;
+    // straight up goes to the roomier side if it must move away from the head
+    const side = a > 0 ? 1 : a < 0 ? -1 : rect.x + rect.w - cx >= cx - rect.x ? 1 : -1;
     // straight up goes a little higher, to stay clear of the top of the head
     const far = a === 0 ? reach + s * 0.2 : reach;
     let x = cx + Math.sin(a) * far;
@@ -165,7 +183,7 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
   for (const dir of [1, -1]) {
     const group = at
       .map((p, i) => ({ p, i }))
-      .filter(({ p, i }) => (p.x === cx ? (i % 2 === 0 ? 1 : -1) : Math.sign(p.x - cx)) === dir)
+      .filter(({ p }) => (p.x === cx ? (rect.x + rect.w - cx >= cx - rect.x ? 1 : -1) : Math.sign(p.x - cx)) === dir)
       .sort((a, b) => Math.abs(a.p.x - cx) - Math.abs(b.p.x - cx));
     for (let k = 1; k < group.length; k++) {
       const prev = group[k - 1].p;
@@ -175,5 +193,14 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
     }
   }
   for (const p of at) p.x = Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, p.x));
+  // Against a screen edge the clamp can stack bubbles: move the outer one a row down.
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < at.length; i++)
+      for (let j = i + 1; j < at.length; j++) {
+        if (Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y) >= r * 2.1) continue;
+        const outer = Math.abs(at[i].x - cx) >= Math.abs(at[j].x - cx) ? at[i] : at[j];
+        outer.y += r * 2.2;
+      }
+  }
   return { r, at };
 }

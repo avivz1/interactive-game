@@ -346,7 +346,8 @@ export class Sound {
       // undo a hard stop
       const now = this.ctx.currentTime;
       this.music.gain.cancelScheduledValues(now);
-      this.music.gain.setValueAtTime(1, now);
+      // a voice line still playing keeps the music low; it restores it when it ends
+      this.music.gain.setValueAtTime(this.speaking ? DUCKED : 1, now);
       this.musicCut = false;
     }
     const dance = style === 'dance';
