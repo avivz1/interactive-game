@@ -4,12 +4,12 @@
 import type { Body, Pt } from '../shared/body';
 import { BODY_CONNECTIONS } from '../shared/landmarks';
 
-export function drawBody(ctx: CanvasRenderingContext2D, body: Body): void {
+export function drawBody(ctx: CanvasRenderingContext2D, body: Body, skeletonAlpha = 0.75): void {
   const s = body.shoulderWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.strokeStyle = 'rgba(120, 220, 255, 0.75)';
+  ctx.strokeStyle = 'rgba(120, 220, 255, ' + skeletonAlpha + ')';
   ctx.lineWidth = Math.max(4, s * 0.07);
   ctx.beginPath();
   for (const [a, b] of BODY_CONNECTIONS) {

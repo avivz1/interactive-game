@@ -7,8 +7,14 @@ import { h, mount } from '../shared/dom';
 import { HttpError, apiFetch, sleep } from '../shared/http';
 import { checkLan, waitForConnected } from '../shared/rtc';
 import { browserInfo, hasWebRtc, offerLooksValid, runChecks, type Check } from './checks';
-import { startLive, type EndReason } from './live';
+import { Sound } from './audio';
 import { Receiver } from './receiver';
+import { CheckScene } from './scenes/check';
+import { MenuScene } from './scenes/menu';
+import { SetupScene } from './scenes/setup';
+import { TickleScene } from './scenes/tickle';
+import { LiveSession, type EndReason } from './session';
+import { Stage, type Scene } from './stage';
 
 declare global {
   interface Window {
@@ -24,6 +30,13 @@ const browser = browserInfo();
 const checks = runChecks();
 
 const PHONE_SETUP_GRACE_MS = 3 * 60 * 1000;
+/** Round length; `?round=<seconds>` shortens it for testing. */
+const ROUND_SEC = Math.min(300, Math.max(5, Number(new URLSearchParams(location.search).get('round')) || 60));
+
+// Audio may only start after a user gesture; any remote key or click unlocks it.
+const sound = new Sound();
+document.addEventListener('keydown', () => sound.unlock(), true);
+document.addEventListener('click', () => sound.unlock(), true);
 
 let generation = 0;
 let receiver: Receiver | null = null;
@@ -270,7 +283,7 @@ async function startPairing(): Promise<void> {
   }
 
   onOk = null;
-  disposeLive = startLive(root, rx, lan, (reason: EndReason) => {
+  disposeLive = startGames(rx, lan, (reason: EndReason) => {
     disposeLive = null;
     cleanup();
     if (reason === 'stopped') {
@@ -282,6 +295,28 @@ async function startPairing(): Promise<void> {
       });
     }
   });
+}
+
+/** Starts the play area once the phone is connected: setup → menu → games. */
+function startGames(rx: Receiver, lan: boolean | null, onEnd: (reason: EndReason) => void): () => void {
+  const session = new LiveSession(rx, lan);
+  const stage = new Stage(root, session, sound);
+  let menu: MenuScene | null = null;
+  const toMenu = (): Scene => menu as MenuScene;
+  menu = new MenuScene(
+    stage,
+    [{ id: 'tickle-pop', title: 'Tickle Pop', color: 1, start: () => new TickleScene(stage, toMenu, ROUND_SEC) }],
+    () => new CheckScene(stage, toMenu),
+  );
+  stage.go(new SetupScene(stage, toMenu));
+  session.onEnd = (reason) => {
+    stage.dispose();
+    onEnd(reason);
+  };
+  return () => {
+    stage.dispose();
+    session.dispose();
+  };
 }
 
 void startPairing().catch((err) => {
