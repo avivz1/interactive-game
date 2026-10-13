@@ -102,20 +102,25 @@ describe('Dwell', () => {
     const d = new Dwell(1000);
     expect(d.update(true, 600)).toBe(false);
     expect(d.update(false, 100)).toBe(false);
-    // a short slip doesn't drain it
-    expect(d.progress).toBeCloseTo(0.6);
-    expect(d.update(true, 400)).toBe(true);
+    expect(d.progress).toBeCloseTo(0.5);
+    expect(d.update(true, 500)).toBe(true);
     expect(d.progress).toBe(0);
   });
 
-  it('drains after the hand has been away a while', () => {
+  it('keeps its progress while tracking briefly loses the hand, not when the hand moves away', () => {
     const d = new Dwell(1000, 600);
     d.update(true, 600);
-    for (let i = 0; i < 10; i++) d.update(false, 100); // 1 s away: 0.4 s of draining
+    for (let i = 0; i < 5; i++) d.update(false, 100, true); // lost for 0.5 s
+    expect(d.progress).toBeCloseTo(0.6);
+    for (let i = 0; i < 5; i++) d.update(false, 100, true); // lost for 1 s: drains after the grace
     expect(d.progress).toBeCloseTo(0.2);
-    d.update(true, 100);
-    for (let i = 0; i < 30; i++) d.update(false, 100);
-    expect(d.progress).toBe(0);
+    // quick taps on and off add up no faster than holding
+    const e = new Dwell(1000, 600);
+    for (let i = 0; i < 10; i++) {
+      e.update(true, 100);
+      e.update(false, 100);
+    }
+    expect(e.progress).toBe(0);
   });
 });
 

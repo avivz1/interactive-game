@@ -112,7 +112,8 @@ export class SetupScene implements Scene {
 
     const tips: string[] = [t('setup.space')];
     // an upright phone gives a narrow picture: little room for arms out to the sides
-    if (frame.rect.w < frame.rect.h) tips.push(t('setup.sideways'));
+    // (not while head, feet or raised hands are cut off: an upright phone has more room for those)
+    if (frame.rect.w < frame.rect.h && this.state !== 'hands-cut' && this.state !== 'head-cut' && this.state !== 'feet-cut') tips.push(t('setup.sideways'));
     if (!this.stage.sound.ready) tips.push(t('hint.sound'));
     else if (this.elapsed > SKIP_HINT_AFTER_SEC) tips.push(t('hint.skip'));
     tips.forEach((t, i) => label(ctx, t, width / 2, height * (0.86 + i * 0.06), height * 0.035, '#ffd600'));

@@ -139,6 +139,18 @@ describe('boop game', () => {
     }
   });
 
+  it('puts no new egg down low while the feet are out of the picture', () => {
+    const env = { ...ENV, feetSeen: false };
+    for (let seed = 1; seed <= 10; seed++) {
+      const g = new BoopGame({ durationSec: 60, seed });
+      for (let i = 0; i < 600; i++) {
+        const target = g.critters.find((c) => sitting(c) && c.armed);
+        g.update(DT, env, target && i % 2 === 0 ? hand(target) : NONE);
+        for (const c of g.critters) expect(c.zone).not.toBe('low');
+      }
+    }
+  });
+
   it('keeps critters inside the picture and off the face when the child stands by an edge', () => {
     for (const cx of [90, 1830])
       for (let seed = 1; seed <= 20; seed++) {

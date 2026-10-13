@@ -3,27 +3,36 @@ import { t } from '../shared/i18n';
 export type Facing = 'environment' | 'user';
 
 /**
- * Opens the camera with a 4:3 picture: the sensor's full height (a 16:9
- * picture crops a quarter of it), so raised hands and feet both fit. If the
- * browser still gives a wide picture, it asks once more for 4:3 exactly.
+ * The camera picture we ask for: the sensor's own 4:3 mode (a 16:9 picture
+ * crops a quarter of its height), never a 4:3 cut out of a 16:9 picture
+ * (`resizeMode: 'none'` makes browsers prefer a native mode over cropping).
+ */
+function constraints(facing: Facing, exact: boolean): MediaTrackConstraints {
+  return {
+    facingMode: { ideal: facing },
+    aspectRatio: exact ? { exact: 4 / 3 } : { ideal: 4 / 3 },
+    width: { ideal: 1280 },
+    height: { ideal: 960 },
+    frameRate: { ideal: 30, max: 30 },
+    // not in every TypeScript DOM version yet
+    ...({ resizeMode: exact ? { exact: 'none' } : { ideal: 'none' } } as MediaTrackConstraints),
+  };
+}
+
+/**
+ * Opens the camera with the full 4:3 sensor picture, so raised hands and feet
+ * both fit. If the browser still gives a wide picture, it asks once more for a
+ * native 4:3 mode (and keeps the wide one if there is none).
  */
 export async function openCamera(facing: Facing, devices: Pick<MediaDevices, 'getUserMedia'> = navigator.mediaDevices): Promise<MediaStream> {
-  const stream = await devices.getUserMedia({
-    audio: false,
-    video: {
-      facingMode: { ideal: facing },
-      aspectRatio: { ideal: 4 / 3 },
-      height: { ideal: 720 },
-      frameRate: { ideal: 30, max: 30 },
-    },
-  });
+  const stream = await devices.getUserMedia({ audio: false, video: constraints(facing, false) });
   const track = stream.getVideoTracks()[0];
   const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : {};
   const w = settings.width || 0;
   const h = settings.height || 0;
   if (track && w > 0 && h > 0 && Math.max(w, h) / Math.min(w, h) > 1.5) {
     try {
-      await track.applyConstraints({ aspectRatio: { exact: 4 / 3 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } });
+      await track.applyConstraints(constraints(facing, true));
     } catch {
       // keep the wide picture
     }

@@ -12,8 +12,10 @@ export interface Pt {
 export interface Body {
   /** All 33 landmarks in screen space (null when not tracked). */
   points: (Pt | null)[];
-  /** Palm centres, one per hand (either may be null). */
+  /** Palm centres, one per hand (either may be null), kept inside the picture. */
   hands: (Pt | null)[];
+  /** Per hand: the palm was really past the edge of the picture (moved inside). */
+  handsClamped: boolean[];
   head: Pt | null;
   headRadius: number;
   /** Shoulder width in pixels (S); falls back to a fraction of the video height. */
@@ -39,10 +41,12 @@ export function buildBody(landmarks: ReadonlyArray<Landmark | null>, rect: Rect,
   const inset = Math.min(Math.max(14, shoulderWidth * 0.3), rect.w * 0.1, rect.h * 0.1);
   const inside = (p: Pt | null): Pt | null =>
     p && { x: Math.max(rect.x + inset, Math.min(rect.x + rect.w - inset, p.x)), y: Math.max(rect.y + inset, Math.min(rect.y + rect.h - inset, p.y)) };
-  const hands = [inside(palm(at(LM.leftWrist), at(LM.leftElbow))), inside(palm(at(LM.rightWrist), at(LM.rightElbow)))];
+  const raw = [palm(at(LM.leftWrist), at(LM.leftElbow)), palm(at(LM.rightWrist), at(LM.rightElbow))];
+  const hands = raw.map(inside);
+  const handsClamped = raw.map((p, i) => !!p && (p.x !== hands[i]!.x || p.y !== hands[i]!.y));
   const head = at(LM.nose);
   const le = at(LM.leftEar);
   const re = at(LM.rightEar);
   const headRadius = Math.max(le && re ? dist(le, re) * 0.8 : 0, shoulderWidth * 0.35);
-  return { points, hands, head, headRadius, shoulderWidth };
+  return { points, hands, handsClamped, head, headRadius, shoulderWidth };
 }

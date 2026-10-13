@@ -75,9 +75,9 @@ export class BoopScene implements Scene {
     const la = body.points[27];
     const ra = body.points[28];
     const seen = la && ra ? Math.max(la.y, ra.y) : la ? la.y : ra ? ra.y : null;
-    if (seen === null) this.floor = null;
-    else this.floor = this.floor === null || seen > this.floor ? seen : this.floor + (seen - this.floor) * Math.min(1, dt * 0.5);
-    const target: BoopEnv = { cx: (ls.x + rs.x) / 2, shoulderY: (ls.y + rs.y) / 2, floor: this.floor, unit, rect };
+    // feet out of the picture: low eggs stay where they were (the last floor seen), no new ones go low
+    if (seen !== null) this.floor = this.floor === null || seen > this.floor ? seen : this.floor + (seen - this.floor) * Math.min(1, dt * 0.5);
+    const target: BoopEnv = { cx: (ls.x + rs.x) / 2, shoulderY: (ls.y + rs.y) / 2, floor: this.floor, feetSeen: seen !== null, unit, rect };
     const cur = this.env;
     if (!cur) {
       this.env = target;
@@ -87,6 +87,7 @@ export class BoopScene implements Scene {
     cur.cx += (target.cx - cur.cx) * k;
     cur.shoulderY += (target.shoulderY - cur.shoulderY) * k;
     cur.floor = target.floor;
+    cur.feetSeen = target.feetSeen;
     cur.unit = target.unit;
     cur.rect = rect;
   }

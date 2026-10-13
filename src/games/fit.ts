@@ -5,8 +5,8 @@ import { LM, type Landmark } from '../shared/landmarks';
 
 export type FitState = 'no-body' | 'head-cut' | 'too-close' | 'feet-cut' | 'too-far' | 'hands-cut' | 'ok';
 
-/** Shoulder width as a share of the frame width below which the child is too far away. */
-const MIN_SHOULDER_WIDTH = 0.06;
+/** Shoulder width as a share of the frame width below which the player is too far away (MediaPipe still tracks well there). */
+const MIN_SHOULDER_WIDTH = 0.045;
 
 export function evaluateFit(points: ReadonlyArray<Landmark | null>): FitState {
   const p = (i: number) => points[i] || null;
@@ -48,7 +48,7 @@ export function roomBelowFeet(points: ReadonlyArray<Landmark | null>): boolean {
   return !!la && !!ra && Math.max(la.y, ra.y) < 0.85;
 }
 
-export type ViewHint = 'no-one' | 'cut' | null;
+export type ViewHint = 'no-one' | 'cut' | 'rotated' | null;
 
 /**
  * What the phone tells whoever set it up: nobody found for a second, or the
@@ -57,7 +57,19 @@ export type ViewHint = 'no-one' | 'cut' | null;
 export function viewHint(points: ReadonlyArray<Landmark | null> | null, msSinceBody: number): ViewHint {
   if (!points || msSinceBody > 1000) return 'no-one';
   const seen = points.map((p) => (p && p.visibility >= 0.3 ? p : null));
+  const ls = seen[LM.leftShoulder];
+  const rs = seen[LM.rightShoulder];
+  const lh = seen[LM.leftHip];
+  const rh = seen[LM.rightHip];
+  // lying on its side: the phone is turned but its picture isn't (rotation lock)
+  if (ls && rs && lh && rh) {
+    const dx = (lh.x + rh.x) / 2 - (ls.x + rs.x) / 2;
+    const dy = (lh.y + rh.y) / 2 - (ls.y + rs.y) / 2;
+    if (Math.abs(dx) > Math.abs(dy)) return 'rotated';
+  }
   const nose = seen[LM.nose];
   if (nose && nose.y < 0.03) return 'cut';
+  // the body is seen but the head or shoulders are not: too close, or the phone too low
+  if ((lh || rh) && (!nose || !ls || !rs)) return 'cut';
   return handsRoom(seen) ? null : 'cut';
 }

@@ -227,11 +227,9 @@ export class DrawScene implements Scene {
       right = cx + s * 0.4;
     }
     // not right at the top of the picture: a hand drawing there would leave it
-    // (a grown-up's head is near the top); the board grows down a little instead
-    const top = rect.y + rect.h * 0.08;
-    const by = Math.max(top, sy - s * 1.5);
-    const lost = Math.min(s * 0.6, Math.max(0, top - (sy - s * 1.5)));
-    const target: Box = { x: left, y: by, w: right - left, h: Math.min(rect.y + rect.h, sy + s * 0.65 + lost) - by };
+    // (a grown-up's head is near the top)
+    const by = Math.max(rect.y + rect.h * 0.08, sy - s * 1.5);
+    const target: Box = { x: left, y: by, w: right - left, h: Math.min(rect.y + rect.h, sy + s * 0.65) - by };
     this.lineW = Math.max(8, s * 0.11);
     if (!this.board || !this.buttons) {
       this.board = target;
@@ -382,7 +380,8 @@ export class DrawScene implements Scene {
       const hand = body.hands[i];
       // A line starts a little inside the border and may run a little past it, so a
       // hand hovering at the edge doesn't scribble and a line doesn't break there.
-      const on = !!hand && this.onBoard(hand, this.sheet.isDrawing(i) ? s * 0.12 : -s * 0.15);
+      // a hand past the edge of the picture lifts the pen (it is only held at the edge)
+      const on = !!hand && !body.handsClamped[i] && this.onBoard(hand, this.sheet.isDrawing(i) ? s * 0.12 : -s * 0.15);
       this.sheet.update(i, hand ? this.toSheet(hand) : null, on, this.clock);
     }
     if (!this.timerStarted && this.sheet.ink() > 0) this.timerStarted = true;

@@ -99,5 +99,7 @@ describe('body', () => {
     expect(hand.y).toBeGreaterThan(rect.y);
     expect(hand.x).toBeGreaterThan(rect.x);
     expect(hand.x).toBeLessThan(rect.x + rect.w);
+    // reported as moved, so drawing can lift the pen
+    expect(body.handsClamped).toEqual([true, false]);
   });
 });

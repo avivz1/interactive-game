@@ -62,6 +62,16 @@ describe('phone view hint', () => {
     const close = landmarks(adult(), { height: 0.5, distance: 2.0, aspect: 3 / 4 }).map((p) => p!);
     expect(viewHint(close, 100)).toBe('cut');
   });
+  it('says the picture is on its side when the phone is turned but rotation is locked', () => {
+    // the body lies across the picture
+    const pts = landmarks(adult(), cam).map((p) => p && { x: 1 - p.y, y: p.x, visibility: p.visibility }).map((p) => p!);
+    expect(viewHint(pts, 100)).toBe('rotated');
+  });
+  it('says cut off when the body is seen but the head is not', () => {
+    const pts = landmarks(adult(), cam).map((p) => p!);
+    pts[LM.nose] = { ...pts[LM.nose], visibility: 0.05 };
+    expect(viewHint(pts, 100)).toBe('cut');
+  });
   it('is quiet when everything fits', () => {
     expect(viewHint(landmarks(adult(), cam).map((p) => p!), 100)).toBeNull();
   });

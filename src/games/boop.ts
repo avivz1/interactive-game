@@ -56,8 +56,10 @@ export type BoopEvent =
 export interface BoopEnv {
   cx: number;
   shoulderY: number;
-  /** The feet's screen y, or null when the feet are not in the picture. */
+  /** The feet's screen y (the last seen), or null when never seen. */
   floor: number | null;
+  /** The feet are in the picture right now (default: when `floor` is known); no new eggs go low otherwise. */
+  feetSeen?: boolean;
   /** Shoulder width in pixels. */
   unit: number;
   rect: Rect;
@@ -238,7 +240,7 @@ export class BoopGame {
   }
 
   private pickZone(env: BoopEnv, not: Zone | null): Zone {
-    const zones: Zone[] = env.floor !== null ? ['high', 'high', 'side', 'low'] : ['high', 'high', 'side'];
+    const zones: Zone[] = env.floor !== null && env.feetSeen !== false ? ['high', 'high', 'side', 'low'] : ['high', 'high', 'side'];
     for (let i = 0; i < 4; i++) {
       const z = zones[Math.floor(this.rand() * zones.length) % zones.length];
       if (z !== not) return z;

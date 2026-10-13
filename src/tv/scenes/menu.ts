@@ -25,6 +25,8 @@ const MORE_SEC = 1.5;
 const SWIPE_HINT_SEC = 4;
 /** Ask for a step back once raised hands have had no room for this long. */
 const HANDS_HINT_SEC = 3;
+/** How often to check whether all games fit (the layout search is not cheap on a TV). */
+const RECHECK_SEC = 0.25;
 
 export interface MenuItem {
   id: string;
@@ -58,6 +60,10 @@ export class MenuScene implements Scene {
   private wantFor = 0;
   private pagedFor = 0;
   private swipeHinted = false;
+  /** Someone has swiped already (this session): no need to explain it again. */
+  private swiped = false;
+  private recheckIn = 0;
+  private want = 0;
   private noRoomFor = 0;
   private handsHinted = false;
   /** Where the player is (for the page arrows). */
@@ -76,6 +82,7 @@ export class MenuScene implements Scene {
     this.sinceSpoken = 0;
     this.perPage = 0;
     this.wantFor = 0;
+    this.recheckIn = 0;
     this.pagedFor = 0;
     this.swipeHinted = false;
     this.noRoomFor = 0;
@@ -116,6 +123,7 @@ export class MenuScene implements Scene {
   private turnPage(delta: number): void {
     const pages = Math.ceil(this.tiles.length / this.per);
     this.focus = ((this.page + delta + pages) % pages) * this.per;
+    this.swiped = true;
     this.stage.sound.boing();
     this.newPage(delta);
   }
@@ -152,9 +160,15 @@ export class MenuScene implements Scene {
     this.player = { cx, shoulderY, s };
     const n = this.tiles.length;
 
-    // all games when they fit, else two at a time, else one
-    const all = menuLayout(n, cx, shoulderY, s, rect);
-    const want = all.ok ? n : n > 2 && menuLayout(2, cx, shoulderY, s, rect).ok ? 2 : 1;
+    // all games when they fit, else two at a time, else one (checked a few times a second;
+    // going back to more needs a little spare room, so swaying at the limit doesn't flip it)
+    this.recheckIn -= dt;
+    if (this.recheckIn <= 0 || this.perPage === 0) {
+      this.recheckIn = RECHECK_SEC;
+      const fits = (k: number) => menuLayout(k, cx, shoulderY, s, rect).ok && (this.perPage === 0 || k <= this.perPage || menuLayout(k, cx, shoulderY - s * 0.15, s, rect).ok);
+      this.want = fits(n) ? n : n > 2 && fits(2) ? 2 : 1;
+    }
+    const want = this.want;
     if (this.perPage === 0) {
       this.perPage = want;
       this.newPage(0);
@@ -174,10 +188,19 @@ export class MenuScene implements Scene {
       this.pagedFor += dt;
       const lh = body.points[LM.leftHip];
       const rh = body.points[LM.rightHip];
-      const bottom = lh && rh ? (lh.y + rh.y) / 2 + s * 0.2 : shoulderY + s * 1.6;
-      const dir = this.swipe.update(hands, s, dt, { top: shoulderY - s * 0.1, bottom });
+      // (a hand near its own hip doesn't count as reaching, so the band ends above the hips)
+      const bottom = lh && rh ? (lh.y + rh.y) / 2 - s * 0.25 : shoulderY + s * 1.2;
+      // below the shown bubbles' reach, and never while a hand is on a bubble
+      let top = shoulderY - s * 0.1;
+      let onBubble = false;
+      this.tiles.forEach((t, i) => {
+        if (!this.shown(i) || t.r <= 0) return;
+        top = Math.max(top, t.at.y + t.r + s * 0.2);
+        for (const h of hands) if (h && distance(h, t.at) <= t.r + s * 0.2) onBubble = true;
+      });
+      const dir = this.swipe.update(onBubble ? [null, null] : hands, s, dt, { top, bottom }, cx);
       if (dir) this.turnPage(dir);
-      if (!this.swipeHinted && this.pagedFor >= SWIPE_HINT_SEC && !sound.isSpeaking) {
+      if (!this.swipeHinted && !this.swiped && this.pagedFor >= SWIPE_HINT_SEC && sound.ready && !sound.isSpeaking) {
         this.swipeHinted = true;
         sound.speak('swipe', 0);
       }
@@ -185,7 +208,7 @@ export class MenuScene implements Scene {
     // (after a page turn: the new page)
     const start = this.page * per;
     const count = Math.min(per, n - start);
-    const layout = count === n ? all : menuLayout(count, cx, shoulderY, s, rect);
+    const layout = menuLayout(count, cx, shoulderY, s, rect);
     const R = layout.r;
 
     // each hand counts only for the nearest bubble it is over
@@ -220,7 +243,7 @@ export class MenuScene implements Scene {
       t.at = { x: t.at.x + (target.x - t.at.x) * k, y: t.at.y + (target.y - t.at.y) * k };
       t.r += (R - t.r) * Math.max(k, 0.12);
       if (Math.abs(target.x - t.at.x) < s * 0.1) t.enter = 0;
-      if (t.dwell.update(hovered.has(t), dt * 1000)) this.choose(t);
+      if (t.dwell.update(hovered.has(t), dt * 1000, !hands[0] && !hands[1])) this.choose(t);
     });
   }
 

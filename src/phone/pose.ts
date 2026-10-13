@@ -20,18 +20,22 @@ const EVAL_FRAMES = 60;
 const UPGRADE_MS = 30;
 /** Fall back full -> lite when full is slower than this. */
 const DOWNGRADE_MS = 45;
-/** After falling back to lite, try full again this much later (the phone may have cooled down). */
+/** After falling back to lite, try full again this much later (the phone may have cooled down), doubling each time... */
 const RETRY_FULL_MS = 60_000;
+/** ...at most this many times in all. */
+const MAX_FULL_TRIES = 3;
 /** Detection, presence and tracking confidence (MediaPipe's default is 0.5): small or far players are found more often. */
 const MIN_CONFIDENCE = 0.4;
 
 /**
  * Which model to switch to after measuring `avgMs` per frame on `current`, or
- * null to stay. `fullTriedAt` is when full was last tried (null: never).
+ * null to stay. `fullDroppedAt`: when full was last given up (null: never);
+ * `fullTries`: how often full has been tried.
  */
-export function nextModel(current: PoseModel, avgMs: number, fullTriedAt: number | null, now: number): PoseModel | null {
-  if (current === 'lite') return avgMs < UPGRADE_MS && (fullTriedAt === null || now - fullTriedAt >= RETRY_FULL_MS) ? 'full' : null;
-  return avgMs > DOWNGRADE_MS ? 'lite' : null;
+export function nextModel(current: PoseModel, avgMs: number, fullDroppedAt: number | null, now: number, fullTries = 0): PoseModel | null {
+  if (current === 'full') return avgMs > DOWNGRADE_MS ? 'lite' : null;
+  if (avgMs >= UPGRADE_MS || fullTries >= MAX_FULL_TRIES) return null;
+  return fullDroppedAt === null || now - fullDroppedAt >= RETRY_FULL_MS * Math.pow(2, Math.max(0, fullTries - 1)) ? 'full' : null;
 }
 
 export type PoseModel = keyof typeof MODEL_URLS;
@@ -82,7 +86,8 @@ export class MediaPipePose implements PoseSource {
   private landmarker: Vision.PoseLandmarker | null = null;
   private currentModel: PoseModel = 'lite';
   private framesOnModel = 0;
-  private fullTriedAt: number | null = null;
+  private fullDroppedAt: number | null = null;
+  private fullTries = 0;
   private switching = false;
   private video: VideoWithFrames | null = null;
   private onPose: PoseHandler | null = null;
@@ -134,9 +139,10 @@ export class MediaPipePose implements PoseSource {
   private maybeSwitch(): void {
     if (this.switching || ++this.framesOnModel < EVAL_FRAMES) return;
     const now = performance.now();
-    const next = nextModel(this.currentModel, this.avgInfer, this.fullTriedAt, now);
+    const next = nextModel(this.currentModel, this.avgInfer, this.fullDroppedAt, now, this.fullTries);
     if (!next) return;
-    if (next === 'full') this.fullTriedAt = now;
+    if (next === 'full') this.fullTries++;
+    else this.fullDroppedAt = now;
     void this.swapTo(next);
   }
 

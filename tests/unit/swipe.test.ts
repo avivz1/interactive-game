@@ -51,3 +51,35 @@ describe('swipe', () => {
     expect(move(d, { x: 820, y: 550 }, { x: 900, y: 550 }, 0.1)).toEqual([]);
   });
 });
+
+describe('swipe: what is not a swipe', () => {
+  it('bringing the hand back after a swipe does not flip the page back', () => {
+    const d = new SwipeDetector();
+    expect(move(d, { x: 700, y: 550 }, { x: 1000, y: 550 }, 0.35)).toEqual([1]);
+    // straight back, at about the same speed, starting at once or a little later
+    expect(move(d, { x: 1000, y: 550 }, { x: 700, y: 550 }, 0.5)).toEqual([]);
+    expect(move(d, { x: 700, y: 550 }, { x: 700, y: 550 }, 0.3)).toEqual([]);
+  });
+
+  it('a clap (both hands toward each other) is not a swipe', () => {
+    const d = new SwipeDetector();
+    const out: number[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const f = k / 10;
+      const r = d.update([{ x: 1150 - 250 * f, y: 550 }, { x: 750 + 250 * f, y: 550 }], U, DT, BAND, 950);
+      if (r) out.push(r);
+    }
+    expect(out).toEqual([]);
+  });
+
+  it('stepping sideways with the hands in front is not a swipe', () => {
+    const d = new SwipeDetector();
+    const out: number[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const x = 700 + 30 * k;
+      const r = d.update([{ x: x + 120, y: 550 }, { x: x - 120, y: 550 }], U, DT, BAND, x);
+      if (r) out.push(r);
+    }
+    expect(out).toEqual([]);
+  });
+});

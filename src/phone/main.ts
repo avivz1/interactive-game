@@ -27,6 +27,8 @@ interface Live {
   facing: Facing;
   timers: ReturnType<typeof setInterval>[];
   ended: boolean;
+  /** The last camera failure (shown instead of the tracking hints until a camera opens again). */
+  cameraError: string | null;
 }
 
 let live: Live | null = null;
@@ -179,7 +181,7 @@ async function start(session: JoinResponse): Promise<void> {
   void video.play().catch(() => undefined);
 
   const sender = new Sender();
-  const state: Live = { session, sender, stream, video, pose: null, facing: 'environment', timers: [], ended: false };
+  const state: Live = { session, sender, stream, video, pose: null, facing: 'environment', timers: [], ended: false, cameraError: null };
   live = state;
 
   try {
@@ -321,11 +323,16 @@ async function startTracking(state: Live): Promise<void> {
       state.sender.sendCtl({ t: 'stats', fps: pose.fps, inferMs: pose.inferMs, model: pose.model });
       const fps = pose.fps.toFixed(0);
       const ms = pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '';
+      if (state.cameraError) {
+        const msg = state.cameraError;
+        setTrackStatus(() => msg);
+        return;
+      }
       const hint = viewHint(lastPose, performance.now() - lastBodyAt);
-      const upright = state.video.videoHeight > state.video.videoWidth;
+      const upright = state.video.videoHeight > state.video.videoWidth && hint !== 'rotated';
       setTrackStatus(() => {
         const lines = [t('ph.tracking', { fps }) + ms + ' · ' + pose.model];
-        if (hint) lines.unshift(t(hint === 'no-one' ? 'ph.no_one' : 'ph.cut'));
+        if (hint) lines.unshift(t(hint === 'no-one' ? 'ph.no_one' : hint === 'rotated' ? 'ph.rotated' : 'ph.cut'));
         if (upright) lines.push(t('ph.sideways'));
         return lines.join(' · ');
       });
@@ -352,6 +359,7 @@ async function useStream(state: Live, next: MediaStream, facing: Facing): Promis
     return false;
   }
   state.stream = next;
+  state.cameraError = null;
   state.facing = facing;
   state.video.srcObject = next;
   void state.video.play().catch(() => undefined);
@@ -370,6 +378,7 @@ function showLive(state: Live): void {
     try {
       if (await useStream(state, await openCamera(facing), facing)) sendHello(state);
     } catch (err) {
+      state.cameraError = cameraErrorMessage(err);
       setTrackStatus(() => cameraErrorMessage(err));
       try {
         await useStream(state, await openCamera(previous), previous);
@@ -430,7 +439,10 @@ document.addEventListener('visibilitychange', () => {
   if (track && track.readyState === 'live') return;
   void openCamera(state.facing)
     .then((next) => useStream(state, next, state.facing))
-    .catch(() => undefined);
+    .catch((err) => {
+      state.cameraError = cameraErrorMessage(err);
+      setTrackStatus(() => cameraErrorMessage(err));
+    });
 });
 
 window.addEventListener('pagehide', () => stopLive(true));

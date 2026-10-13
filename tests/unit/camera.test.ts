@@ -26,7 +26,9 @@ describe('camera', () => {
     await openCamera('environment', devices);
     const video = calls.get[0].video as MediaTrackConstraints;
     expect(video.aspectRatio).toEqual({ ideal: 4 / 3 });
-    expect(video.width).toBeUndefined();
+    expect(video.height).toEqual({ ideal: 960 });
+    // a native 4:3 mode, never a 4:3 cut out of a wide picture
+    expect((video as { resizeMode?: unknown }).resizeMode).toEqual({ ideal: 'none' });
     expect(calls.apply).toHaveLength(0);
   });
 
@@ -39,6 +41,7 @@ describe('camera', () => {
       await openCamera('environment', devices);
       expect(calls.apply).toHaveLength(1);
       expect(calls.apply[0].aspectRatio).toEqual({ exact: 4 / 3 });
+      expect((calls.apply[0] as { resizeMode?: unknown }).resizeMode).toEqual({ exact: 'none' });
     }
   });
 
@@ -54,10 +57,13 @@ describe('pose model choice', () => {
     const { nextModel } = await import('../../src/phone/pose');
     expect(nextModel('lite', 20, null, 0)).toBe('full');
     expect(nextModel('lite', 35, null, 0)).toBeNull();
-    expect(nextModel('full', 50, 0, 1000)).toBe('lite');
-    expect(nextModel('full', 30, 0, 1000)).toBeNull();
-    // tried a moment ago: stay on lite for now
-    expect(nextModel('lite', 20, 1000, 30_000)).toBeNull();
-    expect(nextModel('lite', 20, 1000, 61_000)).toBe('full');
+    expect(nextModel('full', 50, null, 1000)).toBe('lite');
+    expect(nextModel('full', 30, null, 1000)).toBeNull();
+    // given up a moment ago: stay on lite for now, then wait longer each time, and stop after three tries
+    expect(nextModel('lite', 20, 1000, 30_000, 1)).toBeNull();
+    expect(nextModel('lite', 20, 1000, 61_000, 1)).toBe('full');
+    expect(nextModel('lite', 20, 1000, 100_000, 2)).toBeNull();
+    expect(nextModel('lite', 20, 1000, 121_000, 2)).toBe('full');
+    expect(nextModel('lite', 20, 1000, 10_000_000, 3)).toBeNull();
   });
 });
