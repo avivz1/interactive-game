@@ -127,13 +127,15 @@ export class MenuScene implements Scene {
       ring(ctx, at, tile.r * 1.12, tile.dwell.progress, '#ffd600', Math.max(6, tile.r * 0.1));
       if (i === this.focus && this.tiles.length > 1) ring(ctx, at, tile.r * 1.3, 0, '#fff', 3);
       // names shrink to their bubble's width so neighbours never overlap; a name
-      // that would cover the child's face goes above its bubble instead
+      // that would cover the child's face goes above its bubble instead (over
+      // the bubble's top when the picture ends there)
       const head = frame.body.head;
       const half = tile.r * 1.05;
+      const size = Math.max(24, tile.r * 0.32);
       const below = at.y + tile.r * 1.45;
       const nearX = Math.max(at.x - half, Math.min(at.x + half, head ? head.x : 0));
       const overFace = !!head && Math.hypot(nearX - head.x, below - head.y) < frame.body.headRadius * 1.3 + tile.r * 0.2;
-      fitLabel(ctx, t(tile.item.title), at.x, overFace ? at.y - tile.r * 1.45 : below, Math.max(24, tile.r * 0.32), tile.r * 2.1, '#fff');
+      fitLabel(ctx, t(tile.item.title), at.x, overFace ? Math.max(frame.rect.y + size * 0.75, at.y - tile.r * 1.45) : below, size, tile.r * 2.1, '#fff');
     });
     // the top of the screen belongs to the game bubbles
     label(ctx, t('menu.title'), width / 2, height * 0.83, height * 0.045, '#ffd600');
@@ -191,7 +193,7 @@ interface Arrangement {
 
 function arrange(n: number, cx: number, shoulderY: number, s: number, rect: Rect, r: number): Arrangement {
   const reach = s * 1.65;
-  const step = ((n <= 2 ? 62 : n === 3 ? 50 : n === 4 ? 40 : 34) * Math.PI) / 180;
+  const step = ((n <= 2 ? 62 : n === 3 ? 50 : n === 4 ? 40 : n === 5 ? 34 : 30) * Math.PI) / 180;
   const top = rect.y + r * 1.1;
   // the head: about 0.75 s above the shoulders, radius about 0.45 s
   const headY = shoulderY - s * 0.75;

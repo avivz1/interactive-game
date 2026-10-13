@@ -135,6 +135,16 @@
       "en": "[excited] Perfect!",
       "he": "[excited] מושלם!",
       "ar": "[excited] ممتاز!"
+    },
+    "boop_intro": {
+      "en": "Boop the eggs with your hands and feet!",
+      "he": "תנו בופ לביצים עם הידיים והרגליים!",
+      "ar": "المسوا البيض بأيديكم وأرجلكم!"
+    },
+    "surprise": {
+      "en": "[excited] Surprise!",
+      "he": "[excited] הפתעה!",
+      "ar": "[excited] مفاجأة!"
     }
   }
 }

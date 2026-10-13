@@ -285,3 +285,24 @@ describe('menu layout with five games at a corner', () => {
       }
   });
 });
+
+describe('menu layout with six games', () => {
+  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+  for (const [cx, shoulderY, s] of [[960, 500, 150], [960, 241, 159], [700, 350, 150], [1300, 300, 170]] as Array<[number, number, number]>) {
+    it(`keeps six bubbles apart, reachable, above the shoulders and in order (child at ${cx},${shoulderY})`, async () => {
+      const { menuLayout } = await import('../../src/tv/scenes/menu');
+      const { r, at } = menuLayout(6, cx, shoulderY, s, rect);
+      expect(at).toHaveLength(6);
+      for (let i = 0; i < 6; i++)
+        for (let j = i + 1; j < 6; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+      for (const p of at) {
+        const fromShoulder = Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY));
+        expect(fromShoulder - r).toBeLessThanOrEqual(s * 1.5 + 0.5);
+        expect(p.y).toBeLessThanOrEqual(shoulderY);
+        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
+      }
+      const around = at.map((p) => Math.atan2(p.x - cx, shoulderY - p.y));
+      for (let i = 1; i < around.length; i++) expect(around[i]).toBeLessThan(around[i - 1]);
+    });
+  }
+});

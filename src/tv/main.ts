@@ -18,6 +18,7 @@ import { FreezeScene } from './scenes/freeze';
 import { MirrorScene } from './scenes/mirror';
 import { RhythmScene } from './scenes/rhythm';
 import { TickleScene } from './scenes/tickle';
+import { BoopScene } from './scenes/boop';
 import { LiveSession, type EndReason } from './session';
 import { Stage, type Scene } from './stage';
 
@@ -356,6 +357,7 @@ function startGames(rx: Receiver, lan: boolean | null, onEnd: (reason: EndReason
       { id: 'freeze-dance', title: 'game.freeze', color: 3, start: () => new FreezeScene(stage, toMenu, ROUND_SEC) },
       { id: 'mirror-monster', title: 'game.mirror', color: 4, start: () => new MirrorScene(stage, toMenu, ROUND_SEC) },
       { id: 'bubble-beat', title: 'game.rhythm', color: 0, start: () => new RhythmScene(stage, toMenu, ROUND_SEC) },
+      { id: 'boop-transform', title: 'game.boop', color: 2, start: () => new BoopScene(stage, toMenu, ROUND_SEC) },
     ],
     () => new CheckScene(stage, toMenu),
   );

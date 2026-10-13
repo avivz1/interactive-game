@@ -31,6 +31,12 @@ or 6-digit code), the child sees themselves mirrored on the TV with glowing
    down low for a kick) and a ring shrinks onto each one, landing on the
    music's kick drum. Pop it right on the beat for "Perfect!"; early pops still
    count, missed bubbles just float away. Starts slow, gets livelier.
+8. **Boop to Transform** — eggs sit around the child (up high, out to the
+   side, or low for a kick). Boop one with a hand or a lifted foot and it
+   grows a step: the egg hatches, the baby grows up, and the grown-up becomes
+   a sparkly surprise (a crown, wings, a rainbow or a party hat) and flies
+   away. After each boop it hops somewhere new; an egg nobody reaches hops
+   somewhere easier.
 
 Spoken instructions in Hebrew (default), Arabic or English: choose with the
 buttons on the phone, or ◀ ▶ on the TV pairing screen.
@@ -103,7 +109,8 @@ npm run test:e2e  # Playwright: TV + phone pages with a fake camera
 
 `/phone/?pose=synthetic` replaces body tracking with a dancing stick figure
 (`&act=draw`: it draws a creature with one hand; `&act=still` stands still;
-`&act=dance` never stops dancing; `&act=armsup` raises both arms after 11 s). `/tv/?round=10` shortens game
+`&act=dance` never stops dancing; `&act=armsup` raises both arms after 11 s; `&act=sweep` swings both arms in
+big circles after 11 s). `/tv/?round=10` shortens game
 rounds and `?draw=10` the drawing time (for testing).
 
 Voice lines are listed in `scripts/voice-lines.json` and recorded with
@@ -117,4 +124,5 @@ Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts
 `src/games/creature.ts` (Draw & Alive), `src/games/freeze-dance.ts` (Freeze
 Dance rules and the movement meter), `src/games/limbs.ts` (which hands and feet
 may touch creatures), `src/games/mirror.ts` (Mirror Monster poses and matching), `src/games/rhythm.ts`
-(Bubble Beat chart, timing and spots), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).
+(Bubble Beat chart, timing and spots), `src/games/boop.ts` + `src/tv/boop-art.ts`
+(Boop to Transform), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).

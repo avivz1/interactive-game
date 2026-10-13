@@ -283,6 +283,29 @@ export function syntheticDancer(tSec: number): Landmark[] {
 }
 
 /**
+ * The synthetic figure that, after 11 s (by then the test has reached the
+ * game), swings both arms in big circles up high and out to the sides
+ * (`act=sweep`, for Boop to Transform tests).
+ */
+export function syntheticSweeper(tSec: number): Landmark[] {
+  const pts = syntheticFigure(tSec);
+  if (tSec < 11) return pts;
+  const a = tSec * 2.4;
+  const set = (i: number, x: number, y: number) => {
+    pts[i] = { x, y, visibility: 0.99 };
+  };
+  // before mirroring: the figure's left arm is on the right of the picture
+  for (const side of [1, -1]) {
+    const sx = 0.5 + side * 0.08;
+    const wx = sx + side * (0.08 + Math.cos(a) * 0.14);
+    const wy = 0.27 + Math.sin(side > 0 ? a : a + Math.PI) * 0.17;
+    set(side > 0 ? LM.leftElbow : LM.rightElbow, (sx + wx) / 2 + side * 0.02, (0.33 + wy) / 2);
+    set(side > 0 ? LM.leftWrist : LM.rightWrist, wx, wy);
+  }
+  return pts;
+}
+
+/**
  * The synthetic figure that, after 11 s (by then the test has reached the game,
  * so raised hands can't pick a menu bubble), holds both arms up in a Y
  * (`act=armsup`, for Mirror Monster tests).

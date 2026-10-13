@@ -186,7 +186,7 @@ test('Hebrew by default, and the language chosen on the phone reaches the TV', a
 /** The synthetic figure that draws a creature (body, ears, legs) with its left hand, in a 16 s loop. */
 const DRAWING_PHONE = '/phone/?pose=synthetic&act=draw';
 
-const GAMES = ['tickle-pop', 'draw-alive', 'freeze-dance', 'mirror-monster', 'bubble-beat'];
+const GAMES = ['tickle-pop', 'draw-alive', 'freeze-dance', 'mirror-monster', 'bubble-beat', 'boop-transform'];
 
 /**
  * Opens a game from the menu with the remote: ▶ (×5) to the rightmost bubble,
@@ -195,7 +195,7 @@ const GAMES = ['tickle-pop', 'draw-alive', 'freeze-dance', 'mirror-monster', 'bu
  */
 async function openGame(tv: Page, scene: string, lefts: number): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toMatch(/^(menu|tickle-pop|draw-alive|freeze-dance|mirror-monster|bubble-beat)$/);
+    await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toMatch(/^(menu|tickle-pop|draw-alive|freeze-dance|mirror-monster|bubble-beat|boop-transform)$/);
     const now = (await debugValue(tv, 'scene')) as string;
     if (now === scene) return;
     if (GAMES.indexOf(now) >= 0) {
@@ -203,7 +203,7 @@ async function openGame(tv: Page, scene: string, lefts: number): Promise<void> {
       await expect.poll(() => debugValue(tv, 'scene'), { timeout: 5_000 }).toBe('menu');
     }
     await tv.waitForTimeout(300); // bubbles settle above the child
-    for (let i = 0; i < 5; i++) await tv.keyboard.press('ArrowRight');
+    for (let i = 0; i < GAMES.length; i++) await tv.keyboard.press('ArrowRight');
     for (let i = 0; i < lefts; i++) await tv.keyboard.press('ArrowLeft');
     let reached = '';
     await expect
@@ -346,7 +346,7 @@ test('Mirror Monster: copying the arms-up pose earns a star', async ({ browser }
   const tv = await openTv(browser, '/tv/?round=12');
   await pairPhone(browser, tv, '/phone/?pose=synthetic&act=armsup');
   await expectStreaming(tv);
-  await openGame(tv, 'mirror-monster', 3); // the fourth bubble is the leftmost
+  await openGame(tv, 'mirror-monster', 3); // the fourth bubble
   await expect.poll(() => debugValue(tv, 'poseId'), { timeout: 10_000 }).toBe('arms-up');
   await expect.poll(() => debugValue(tv, 'wins'), { timeout: 25_000 }).toBeGreaterThanOrEqual(1);
   await expect.poll(() => debugValue(tv, 'ended'), { timeout: 30_000 }).toBe(true);
@@ -358,7 +358,7 @@ test('Bubble Beat: a dancing child pops bubbles on the beat', async ({ browser }
   const tv = await openTv(browser, '/tv/?round=16');
   await pairPhone(browser, tv, '/phone/?pose=synthetic&act=dance');
   await expectStreaming(tv);
-  await openGame(tv, 'bubble-beat', 4); // the fifth bubble is the leftmost
+  await openGame(tv, 'bubble-beat', 4); // the fifth bubble
   await expect.poll(() => debugValue(tv, 'brPhase'), { timeout: 10_000 }).toBe('play');
   await expect.poll(() => debugValue(tv, 'ended'), { timeout: 40_000 }).toBe(true);
   expect(await debugValue(tv, 'total')).toBeGreaterThanOrEqual(3);
@@ -366,3 +366,16 @@ test('Bubble Beat: a dancing child pops bubbles on the beat', async ({ browser }
   expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
 });
 
+test('Boop to Transform: swinging arms boop eggs until they turn into surprises', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const tv = await openTv(browser, '/tv/?round=25');
+  await pairPhone(browser, tv, '/phone/?pose=synthetic&act=sweep');
+  await expectStreaming(tv);
+  await openGame(tv, 'boop-transform', 5); // the sixth bubble is the leftmost
+  await expect.poll(() => debugValue(tv, 'btPhase'), { timeout: 10_000 }).toBe('play');
+  await expect.poll(() => debugValue(tv, 'ended'), { timeout: 45_000 }).toBe(true);
+  expect(await debugValue(tv, 'boops')).toBeGreaterThanOrEqual(3);
+  expect(await debugValue(tv, 'transformed')).toBeGreaterThanOrEqual(1);
+  expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
+});
