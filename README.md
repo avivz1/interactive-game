@@ -27,6 +27,10 @@ or 6-digit code), the child sees themselves mirrored on the TV with glowing
    airplane, one arm up, muscles, hands on hips or head, star); a faint outline
    of the pose sits on the child's body and turns green limb by limb. Hold it
    for a second to earn a star; a pose that is too hard moves on with a shrug.
+7. **Bubble Beat** — bubbles appear around the child (up high for the hands,
+   down low for a kick) and a ring shrinks onto each one, landing on the
+   music's kick drum. Pop it right on the beat for "Perfect!"; early pops still
+   count, missed bubbles just float away. Starts slow, gets livelier.
 
 Spoken instructions in Hebrew (default), Arabic or English: choose with the
 buttons on the phone, or ◀ ▶ on the TV pairing screen.
@@ -112,4 +116,5 @@ Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts
 `src/shared/i18n.ts` (texts), `src/tv/creature-art.ts` + `src/games/drawing.ts` +
 `src/games/creature.ts` (Draw & Alive), `src/games/freeze-dance.ts` (Freeze
 Dance rules and the movement meter), `src/games/limbs.ts` (which hands and feet
-may touch creatures), `src/games/mirror.ts` (Mirror Monster poses and matching), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).
+may touch creatures), `src/games/mirror.ts` (Mirror Monster poses and matching), `src/games/rhythm.ts`
+(Bubble Beat chart, timing and spots), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).

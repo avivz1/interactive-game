@@ -31,6 +31,8 @@ export const VOICE_KEYS = [
   'mirror_intro',
   'hold',
   'did_it',
+  'rhythm_intro',
+  'perfect',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 
@@ -54,6 +56,9 @@ export class Sound {
   private master: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
+  /** Audio time of the music's first step (null until it starts playing). */
+  private musicT0: number | null = null;
+  private musicStepSec = 0.25;
   /** The music bus was silenced by a hard stop. */
   private musicCut = false;
   private musicStep = 0;
@@ -343,7 +348,7 @@ export class Sound {
    * Light bouncy loop (pentatonic, so random notes always sound nice). 'dance'
    * adds a beat (kick, hi-hat, clap) and a little more tempo for Freeze Dance.
    */
-  startMusic(seed = 1, style: 'calm' | 'dance' = 'calm'): void {
+  startMusic(seed = 1, style: 'calm' | 'dance' = 'calm', bpm?: number): void {
     if (this.musicTimer || !this.ctx) return;
     if (this.musicCut && this.music) {
       // undo a hard stop
@@ -360,13 +365,23 @@ export class Sound {
       s = (s * 9301 + 49297) % 233280;
       pattern.push(i % 4 === 3 && s % 3 === 0 ? -1 : s % PENTATONIC.length);
     }
-    const stepSec = 60 / (dance ? 124 : 112) / 2;
+    const stepSec = 60 / (bpm || (dance ? 124 : 112)) / 2;
+    this.musicStepSec = stepSec;
+    this.musicT0 = null;
     this.musicStep = 0;
     this.musicNext = 0;
     this.musicTimer = setInterval(() => {
       const ctx = this.ctx;
       if (!ctx || ctx.state !== 'running') return;
-      if (this.musicNext < ctx.currentTime) this.musicNext = ctx.currentTime + 0.05;
+      if (this.musicT0 === null) {
+        this.musicNext = ctx.currentTime + 0.05;
+        this.musicT0 = this.musicNext;
+      } else if (this.musicNext < ctx.currentTime) {
+        // the timer fell behind: skip whole steps so the beat grid stays put
+        const skip = Math.ceil((ctx.currentTime + 0.02 - this.musicNext) / stepSec);
+        this.musicNext += skip * stepSec;
+        this.musicStep += skip;
+      }
       while (this.musicNext < ctx.currentTime + 0.25) {
         const step = this.musicStep % 16;
         const note = pattern[step];
@@ -383,6 +398,21 @@ export class Sound {
         this.musicStep++;
       }
     }, 60);
+  }
+
+  /**
+   * Seconds since the music's first step on the audio clock (the kick drum
+   * falls every 4 steps), or null while no music is playing.
+   */
+  songTime(): number | null {
+    const ctx = this.ctx;
+    if (!this.musicTimer || !ctx || ctx.state !== 'running' || this.musicT0 === null) return null;
+    return ctx.currentTime - this.musicT0;
+  }
+
+  /** Seconds between kick drums of the current music. */
+  get kickSec(): number {
+    return this.musicStepSec * 4;
   }
 
   /** Stops the music; `cut` also silences notes already scheduled (Freeze Dance's sudden stop). */

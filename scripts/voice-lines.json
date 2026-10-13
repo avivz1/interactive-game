@@ -125,6 +125,16 @@
       "en": "[excited] You did it!",
       "he": "[excited] הצלחתם!",
       "ar": "[excited] نجحتم!"
+    },
+    "rhythm_intro": {
+      "en": "Pop the bubbles to the beat, with your hands and feet!",
+      "he": "פוצצו את הבועות בקצב, עם הידיים והרגליים!",
+      "ar": "فرقعوا الفقاعات مع الإيقاع، بأيديكم وأرجلكم!"
+    },
+    "perfect": {
+      "en": "[excited] Perfect!",
+      "he": "[excited] מושלם!",
+      "ar": "[excited] ممتاز!"
     }
   }
 }

@@ -215,6 +215,27 @@ describe('menu layout with four games', () => {
       for (const p of at) {
         expect(p.x - r).toBeGreaterThanOrEqual(0);
         expect(p.x + r).toBeLessThanOrEqual(1920);
+        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
+      }
+    });
+  }
+});
+
+describe('menu layout with five games', () => {
+  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+  for (const [cx, shoulderY] of [[960, 500], [960, 200], [150, 400], [1800, 300]] as Array<[number, number]>) {
+    it(`keeps five bubbles apart, inside and off the face (child at ${cx},${shoulderY})`, async () => {
+      const { menuLayout } = await import('../../src/tv/scenes/menu');
+      const s = 150;
+      const { r, at } = menuLayout(5, cx, shoulderY, s, rect);
+      expect(at).toHaveLength(5);
+      for (let i = 0; i < 5; i++)
+        for (let j = i + 1; j < 5; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+      for (const p of at) {
+        expect(p.x - r).toBeGreaterThanOrEqual(0);
+        expect(p.x + r).toBeLessThanOrEqual(1920);
+        expect(p.y - r).toBeGreaterThanOrEqual(0);
+        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
       }
     });
   }

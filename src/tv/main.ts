@@ -16,6 +16,7 @@ import { SetupScene } from './scenes/setup';
 import { DrawScene } from './scenes/draw';
 import { FreezeScene } from './scenes/freeze';
 import { MirrorScene } from './scenes/mirror';
+import { RhythmScene } from './scenes/rhythm';
 import { TickleScene } from './scenes/tickle';
 import { LiveSession, type EndReason } from './session';
 import { Stage, type Scene } from './stage';
@@ -354,6 +355,7 @@ function startGames(rx: Receiver, lan: boolean | null, onEnd: (reason: EndReason
       { id: 'draw-alive', title: 'game.draw', color: 2, start: () => new DrawScene(stage, toMenu, { drawSec: DRAW_SEC, playSec: ROUND_SEC }) },
       { id: 'freeze-dance', title: 'game.freeze', color: 3, start: () => new FreezeScene(stage, toMenu, ROUND_SEC) },
       { id: 'mirror-monster', title: 'game.mirror', color: 4, start: () => new MirrorScene(stage, toMenu, ROUND_SEC) },
+      { id: 'bubble-beat', title: 'game.rhythm', color: 0, start: () => new RhythmScene(stage, toMenu, ROUND_SEC) },
     ],
     () => new CheckScene(stage, toMenu),
   );

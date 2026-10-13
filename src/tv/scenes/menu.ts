@@ -147,9 +147,10 @@ export class MenuScene implements Scene {
  * allows and move outward just enough to keep clear of the head.
  */
 export function menuLayout(n: number, cx: number, shoulderY: number, s: number, rect: Rect): { r: number; at: Pt[] } {
-  const r = Math.max(s * 0.5, rect.h * 0.065);
+  // five or more games: smaller bubbles packed closer, still above the head
+  const r = n >= 5 ? Math.max(s * 0.44, rect.h * 0.058) : Math.max(s * 0.5, rect.h * 0.065);
   const reach = s * 1.65;
-  const step = ((n <= 2 ? 62 : n === 3 ? 50 : 40) * Math.PI) / 180;
+  const step = ((n <= 2 ? 62 : n === 3 ? 50 : n === 4 ? 40 : 34) * Math.PI) / 180;
   const top = rect.y + r * 1.1;
   // the head: about 0.75 s above the shoulders, radius about 0.45 s
   const headY = shoulderY - s * 0.75;
@@ -186,15 +187,37 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
       if (Math.hypot(cur.x - prev.x, dy) < need) cur.x = prev.x + dir * Math.sqrt(Math.max(0, need * need - dy * dy));
     }
   }
-  for (const p of at) p.x = Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, p.x));
-  // Against a screen edge the clamp can stack bubbles: move the outer one a row down.
-  for (let pass = 0; pass < 3; pass++) {
-    for (let i = 0; i < at.length; i++)
-      for (let j = i + 1; j < at.length; j++) {
-        if (Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y) >= r * 2.1) continue;
-        const outer = Math.abs(at[i].x - cx) >= Math.abs(at[j].x - cx) ? at[i] : at[j];
-        outer.y += r * 2.2;
-      }
+  // At a screen edge some bubbles don't fit: keep the ones that do, and move
+  // the rest to the nearest free places on wider rings, never over the face.
+  const m = r * 1.05;
+  const inside = (p: Pt) => p.x - m >= rect.x && p.x + m <= rect.x + rect.w && p.y - m >= rect.y && p.y + m <= rect.y + rect.h;
+  const offFace = (p: Pt) => Math.hypot(p.x - cx, p.y - headY) >= clear - 0.5;
+  const placed: Array<Pt | null> = at.map(() => null);
+  const apart = (p: Pt) => placed.every((q) => !q || Math.hypot(p.x - q.x, p.y - q.y) >= r * 2.1);
+  for (let i = 0; i < n; i++) if (inside(at[i]) && offFace(at[i]) && apart(at[i])) placed[i] = at[i];
+  if (placed.every((p) => p)) return { r, at };
+  const spots: Pt[] = [];
+  for (let k = 0; k < 4; k++) {
+    const far = reach + k * r * 2.2;
+    for (let deg = -150; deg <= 150; deg += 5) {
+      const a = (deg * Math.PI) / 180;
+      const p = { x: cx + Math.sin(a) * far, y: shoulderY - Math.cos(a) * far };
+      if (inside(p) && offFace(p)) spots.push(p);
+    }
   }
-  return { r, at };
+  for (let i = 0; i < n; i++) {
+    if (placed[i]) continue;
+    let best: Pt | null = null;
+    let bestD = Infinity;
+    for (const p of spots) {
+      const d = Math.hypot(p.x - at[i].x, p.y - at[i].y);
+      if (d < bestD && apart(p)) {
+        best = p;
+        bestD = d;
+      }
+    }
+    // no room anywhere (a tiny picture): at least stay on screen
+    placed[i] = best || { x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, at[i].x)), y: Math.max(rect.y + m, Math.min(rect.y + rect.h - m, at[i].y)) };
+  }
+  return { r, at: placed as Pt[] };
 }
