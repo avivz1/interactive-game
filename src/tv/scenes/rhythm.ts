@@ -18,6 +18,8 @@ const BPM = 112;
 const PULSE_SEC = 120 / BPM;
 const AWAY_PAUSE_SEC = 2;
 const RESULTS_SEC = 8;
+/** Seconds without either ankle in the picture before asking for a step back. */
+const NO_FEET_SEC = 1.5;
 const SPOT_COLOR: Record<SpotId, number> = { handL: 1, handR: 0, footL: 3, footR: 2 };
 const GRADE_TEXT: Record<Grade, TextKey> = { perfect: 'br.perfect', good: 'br.good', pop: 'br.pop' };
 const GRADE_COLOR: Record<Grade, string> = { perfect: '#ffd600', good: '#7dffa1', pop: '#ffffff' };
@@ -40,7 +42,8 @@ class SongClock {
     }
     if (!this.onMusic) {
       this.onMusic = true;
-      this.base = Math.ceil((this.t - songTime) / PULSE_SEC) * PULSE_SEC;
+      // the game's beats line up with the music's: it waits (never skips ahead) for the next one
+      this.base = Math.floor((this.t - songTime) / PULSE_SEC) * PULSE_SEC;
     }
     this.t = Math.max(this.t, this.base + songTime);
     return this.t;
@@ -65,6 +68,7 @@ export class RhythmScene implements Scene {
   private layout: SpotLayout | null = null;
   /** The floor under the child: drops at once, rises slowly (a kick doesn't lift it). */
   private floor: number | null = null;
+  private noFeetFor = 0;
   private result: { hits: number; stars: number } | null = null;
   private resultFor = 0;
   private readonly seed = Math.floor(Math.random() * 1000);
@@ -173,8 +177,13 @@ export class RhythmScene implements Scene {
     }
     if (this.phase !== 'play') return;
 
+    // foot bubbles need the feet in the picture
+    this.noFeetFor = frame.hasBody && !body.points[27] && !body.points[28] ? this.noFeetFor + dt : 0;
+    if (this.noFeetFor >= NO_FEET_SEC) this.stage.sound.speak('feet', 12);
+
     const now = this.clock.now(this.stage.sound.songTime(), dt);
-    for (const e of this.game.update(now, this.touching)) this.react(e, unit);
+    const lagSec = Math.max(0, Math.min(0.4, this.stage.session.stats.delayMs / 1000));
+    for (const e of this.game.update(now, this.touching, lagSec)) this.react(e, unit);
   }
 
   private react(e: RhythmEvent, unit: number): void {
@@ -255,6 +264,7 @@ export class RhythmScene implements Scene {
       label(ctx, String(Math.ceil(g.remaining)), width * 0.93, hud, height * 0.035);
     }
     if (this.phase === 'intro') label(ctx, t('br.intro'), width / 2, height * 0.86, height * 0.055, '#ffd23f');
+    else if (this.phase === 'play' && this.noFeetFor >= NO_FEET_SEC) label(ctx, t('fit.feet-cut'), width / 2, height * 0.88, height * 0.045, '#ffd23f');
     if (!this.stage.sound.ready) label(ctx, t('hint.sound'), width / 2, height * 0.95, height * 0.03, '#ffd600');
 
     if (this.awayFor >= AWAY_PAUSE_SEC && !this.result) {

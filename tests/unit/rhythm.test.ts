@@ -103,6 +103,22 @@ describe('rhythm game', () => {
     expect(n.grade).toBe('perfect');
   });
 
+  it('judges touches at the moment they happened when the pose arrives late', () => {
+    const lag = 0.25;
+    const g = new RhythmGame(cfg);
+    const n = g.notes[0];
+    // the child touches right on the beat; the TV sees it `lag` later
+    for (let t = 0; t <= n.hitTime + 0.4; t += DT) g.update(t, (s) => s === n.spot && t >= n.hitTime + lag, lag);
+    expect(n.grade).toBe('perfect');
+
+    const late = new RhythmGame(cfg);
+    const m = late.notes[0];
+    // seen just inside the late window, shifted by the lag: still a hit, not a miss
+    for (let t = 0; t <= m.hitTime + GOOD_SEC + lag + 0.1; t += DT) late.update(t, (s) => s === m.spot && t >= m.hitTime + GOOD_SEC + lag - 0.08, lag);
+    expect(m.state).toBe('popped');
+    expect(m.grade).toBe('good');
+  });
+
   it('ends after the round with stars, and then stays quiet', () => {
     const g = new RhythmGame(cfg);
     // pop everything right on its beat
@@ -139,6 +155,17 @@ describe('rhythm spots', () => {
     // no two spots overlap
     for (let i = 0; i < SPOTS.length; i++)
       for (let j = i + 1; j < SPOTS.length; j++) expect(Math.hypot(at[SPOTS[i]].x - at[SPOTS[j]].x, at[SPOTS[i]].y - at[SPOTS[j]].y)).toBeGreaterThan(r * 2);
+  });
+
+  it('never puts a hand bubble on the face when the child stands by a side edge', () => {
+    const s = 159;
+    for (const cx of [60, 127, 200, 1720, 1800, 1860])
+      for (const shoulderY of [150, 370]) {
+        const { at, r } = spotLayout(cx, shoulderY, shoulderY + 2.6 * s, s, rect);
+        for (const id of ['handL', 'handR'] as SpotId[]) expect(Math.hypot(at[id].x - cx, at[id].y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.5 - 1);
+        for (let i = 0; i < SPOTS.length; i++)
+          for (let j = i + 1; j < SPOTS.length; j++) expect(Math.hypot(at[SPOTS[i]].x - at[SPOTS[j]].x, at[SPOTS[i]].y - at[SPOTS[j]].y)).toBeGreaterThan(r * 2);
+      }
   });
 
   it('keeps every bubble inside the picture when the child is at the edge', () => {

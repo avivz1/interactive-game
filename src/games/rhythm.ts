@@ -148,12 +148,15 @@ export class RhythmGame {
 
   /**
    * Advances to song time `t`. `touching(spot)` says whether a reaching hand
-   * or a lifted foot is on that spot's bubble right now.
+   * or a lifted foot is on that spot's bubble right now. The pose arrives
+   * `lagSec` late (over the network), so touches are judged at the moment they
+   * really happened; bubbles still appear and land on the music's own time.
    */
-  update(t: number, touching: (spot: SpotId) => boolean): RhythmEvent[] {
+  update(t: number, touching: (spot: SpotId) => boolean, lagSec = 0): RhythmEvent[] {
     const events: RhythmEvent[] = [];
     if (this.ended) return events;
     this.time = t;
+    const judged = t - lagSec;
     const touch: Partial<Record<SpotId, boolean>> = {};
     const on = (spot: SpotId) => (touch[spot] !== undefined ? touch[spot]! : (touch[spot] = touching(spot)));
     for (const note of this.notes) {
@@ -163,7 +166,7 @@ export class RhythmGame {
         events.push({ type: 'show', note });
       }
       if (note.state !== 'live') continue;
-      const dt = t - note.hitTime;
+      const dt = judged - note.hitTime;
       if (!note.armed && !on(note.spot)) note.armed = true;
       if (note.armed && on(note.spot)) {
         const grade: Grade = Math.abs(dt) <= PERFECT_SEC ? 'perfect' : Math.abs(dt) <= GOOD_SEC ? 'good' : 'pop';
@@ -180,7 +183,7 @@ export class RhythmGame {
         events.push({ type: 'miss', note });
       }
     }
-    const last = this.notes.length ? this.notes[this.notes.length - 1].hitTime + GOOD_SEC : 0;
+    const last = this.notes.length ? this.notes[this.notes.length - 1].hitTime + GOOD_SEC + lagSec : 0;
     if (t >= Math.max(this.config.durationSec, last + 0.5)) {
       this.ended = true;
       events.push({ type: 'end', hits: this.hits, perfects: this.perfects, total: this.total, stars: rhythmStars(this.hits, this.total) });
@@ -201,17 +204,30 @@ export interface SpotLayout {
  */
 export function spotLayout(cx: number, shoulderY: number, floor: number, s: number, rect: { x: number; y: number; w: number; h: number }): SpotLayout {
   const r = Math.max(s * 0.42, rect.h * 0.05);
+  const m = r * 1.1;
   const clamp = (p: Pt): Pt => ({
-    x: Math.max(rect.x + r * 1.1, Math.min(rect.x + rect.w - r * 1.1, p.x)),
-    y: Math.max(rect.y + r * 1.1, Math.min(rect.y + rect.h - r * 1.1, p.y)),
+    x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, p.x)),
+    y: Math.max(rect.y + m, Math.min(rect.y + rect.h - m, p.y)),
   });
-  return {
-    r,
-    at: {
-      handL: clamp({ x: cx - s * 1.45, y: shoulderY - s * 0.55 }),
-      handR: clamp({ x: cx + s * 1.45, y: shoulderY - s * 0.55 }),
-      footL: clamp({ x: cx - s * 0.95, y: floor - s * 0.45 }),
-      footR: clamp({ x: cx + s * 0.95, y: floor - s * 0.45 }),
-    },
+  const at: Record<SpotId, Pt> = {
+    handL: clamp({ x: cx - s * 1.45, y: shoulderY - s * 0.55 }),
+    handR: clamp({ x: cx + s * 1.45, y: shoulderY - s * 0.55 }),
+    footL: clamp({ x: cx - s * 0.95, y: floor - s * 0.45 }),
+    footR: clamp({ x: cx + s * 0.95, y: floor - s * 0.45 }),
   };
+  // Beside a screen edge the outer hand spot gets pushed onto the face: move it
+  // above the head, or else low on the roomier side.
+  const head = { x: cx, y: shoulderY - s * 0.75 };
+  const open = rect.x + rect.w - cx >= cx - rect.x ? 1 : -1;
+  let aboveFree = true;
+  for (const id of ['handL', 'handR'] as SpotId[]) {
+    const p = at[id];
+    if (Math.hypot(p.x - head.x, p.y - head.y) >= r + s * 0.5) continue;
+    const above = { x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, cx)), y: head.y - s * 0.5 - r * 1.2 };
+    if (aboveFree && above.y >= rect.y + m) {
+      at[id] = above;
+      aboveFree = false;
+    } else at[id] = clamp({ x: cx + open * s * 1.45, y: shoulderY + s * 0.45 });
+  }
+  return { r, at };
 }

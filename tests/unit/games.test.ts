@@ -240,3 +240,48 @@ describe('menu layout with five games', () => {
     });
   }
 });
+
+describe('menu layout with five games: reach and order', () => {
+  const big = { x: 0, y: 0, w: 1920, h: 1080 };
+  const small = { x: 0, y: 0, w: 1280, h: 720 };
+  // the last field: the child stands near a side edge, where not everything fits within reach (one step in helps)
+  const cases: Array<[typeof big, number, number, number, boolean]> = [
+    [big, 960, 241, 159, false],
+    [big, 960, 200, 130, false],
+    [big, 1500, 220, 184, false],
+    [small, 640, 200, 200, false],
+    [big, 1700, 370, 159, true],
+    [big, 1720, 370, 159, true],
+    [big, 127, 370, 159, true],
+  ];
+  for (const [rect, cx, shoulderY, s, edge] of cases) {
+    it(`every bubble is reachable, off the hips, and in order around the child (${cx},${shoulderY}, s ${s})`, async () => {
+      const { menuLayout } = await import('../../src/tv/scenes/menu');
+      const { r, at } = menuLayout(5, cx, shoulderY, s, rect);
+      for (const p of at) {
+        const fromShoulder = Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY));
+        if (!edge) expect(fromShoulder - r).toBeLessThanOrEqual(s * 1.5 + 0.5);
+        expect(p.x - r).toBeGreaterThanOrEqual(0);
+        expect(p.x + r).toBeLessThanOrEqual(rect.w);
+        expect(p.y).toBeLessThanOrEqual(shoulderY - s * 0.25); // above the shoulders: hands at the chest never pick
+        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
+      }
+      const around = at.map((p) => Math.atan2(p.x - cx, shoulderY - p.y));
+      for (let i = 1; i < around.length; i++) expect(around[i]).toBeLessThan(around[i - 1]);
+    });
+  }
+});
+
+describe('menu layout with five games at a corner', () => {
+  it('never stacks bubbles, even with the head at the top by the side edge', async () => {
+    const { menuLayout } = await import('../../src/tv/scenes/menu');
+    const rect = { x: 0, y: 0, w: 1920, h: 1080 };
+    for (const cx of [60, 1860])
+      for (const shoulderY of [180, 240]) {
+        const { r, at } = menuLayout(5, cx, shoulderY, 150, rect);
+        for (let i = 0; i < 5; i++)
+          for (let j = i + 1; j < 5; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+        for (const p of at) expect(Math.hypot(p.x - cx, p.y - (shoulderY - 150 * 0.75))).toBeGreaterThanOrEqual(r + 150 * 0.45);
+      }
+  });
+});

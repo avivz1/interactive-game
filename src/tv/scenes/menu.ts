@@ -5,6 +5,7 @@
 
 import type { Pt } from '../../shared/body';
 import { Dwell } from '../../games/dwell';
+import { Limbs } from '../../games/limbs';
 import { t, type TextKey } from '../../shared/i18n';
 import { drawCritter } from '../critters';
 import { drawBody } from '../draw';
@@ -32,6 +33,8 @@ export class MenuScene implements Scene {
   private focus = 0;
   private age = 0;
   private chosen = false;
+  /** A hand resting at the side never picks a game, wherever a bubble ends up. */
+  private readonly limbs = new Limbs();
 
   constructor(
     private readonly stage: Stage,
@@ -78,7 +81,7 @@ export class MenuScene implements Scene {
     const r = targets.r;
     // each hand counts only for the nearest bubble it is over
     const hovered = new Set<Tile>();
-    for (const hand of body.hands) {
+    for (const hand of this.limbs.update(body, frame.dt).hands) {
       if (!hand) continue;
       let best: Tile | null = null;
       let bestD = Infinity;
@@ -106,8 +109,7 @@ export class MenuScene implements Scene {
 
   onKey(key: Key): void {
     if (key === 'left' || key === 'right') {
-      // bubbles are laid out right to left in list order, so the remote follows the list
-      // (it works even when a bubble at a screen edge was moved down a row)
+      // bubbles are laid out right to left (around the child) in list order, so the remote follows the list
       const n = this.tiles.length;
       this.focus = key === 'left' ? Math.min(n - 1, this.focus + 1) : Math.max(0, this.focus - 1);
     } else if (key === 'ok' && this.stage.sound.ready) this.choose(this.tiles[this.focus]);
@@ -142,13 +144,52 @@ export class MenuScene implements Scene {
 
 /**
  * Where the game bubbles go: an arc above the head at raised-hand reach
- * (about 1.65 shoulder widths from the shoulders), 50–62° apart, first game
+ * (about 1.65 shoulder widths from the shoulders), 34–62° apart, first game
  * on the right. With little room above the head they stay as high as the picture
- * allows and move outward just enough to keep clear of the head.
+ * allows and move outward just enough to keep clear of the head. Bubbles that
+ * don't fit within reach that way move to free places nearby (smaller bubbles
+ * if needed); list order always runs right to left around the child.
  */
 export function menuLayout(n: number, cx: number, shoulderY: number, s: number, rect: Rect): { r: number; at: Pt[] } {
   // five or more games: smaller bubbles packed closer, still above the head
-  const r = n >= 5 ? Math.max(s * 0.44, rect.h * 0.058) : Math.max(s * 0.5, rect.h * 0.065);
+  const r0 = n >= 5 ? Math.max(s * 0.44, rect.h * 0.058) : Math.max(s * 0.5, rect.h * 0.065);
+  let first: Arrangement | null = null;
+  for (const k of [1, 0.85, 0.72]) {
+    const a = arrange(n, cx, shoulderY, s, rect, r0 * k);
+    if (a.placed.every((p) => p)) return finish(a, cx, shoulderY);
+    if (!first) first = a;
+  }
+  // Nothing fits within reach (a screen edge): full-size bubbles, the rest
+  // placed further out, still above the shoulders and off the face.
+  const a = first as Arrangement;
+  const { r, placed, ideal } = a;
+  const m = r * 1.05;
+  const span = s * 1.65 + r * 4.4;
+  const far = grid(a, Math.max(rect.x + m, cx - span), Math.min(rect.x + rect.w - m, cx + span), rect.y + m, shoulderY - s * 0.25);
+  let low: Pt[] | null = null;
+  for (let i = 0; i < n; i++) {
+    if (placed[i]) continue;
+    placed[i] = nearestFree(a, ideal[i], far);
+    if (placed[i]) continue;
+    // no room above the shoulders: lower down, rather than on top of another bubble
+    if (!low) low = grid(a, Math.max(rect.x + m, cx - span), Math.min(rect.x + rect.w - m, cx + span), shoulderY - s * 0.25, rect.y + rect.h - m);
+    // no room anywhere (a tiny picture): at least stay on screen
+    placed[i] = nearestFree(a, ideal[i], low) || { x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, ideal[i].x)), y: Math.max(rect.y + m, Math.min(rect.y + rect.h - m, ideal[i].y)) };
+  }
+  return finish(a, cx, shoulderY);
+}
+
+interface Arrangement {
+  r: number;
+  /** The arc positions (before moving the ones that don't fit). */
+  ideal: Pt[];
+  /** Final positions; null where nothing reachable was free. */
+  placed: Array<Pt | null>;
+  offFace: (p: Pt) => boolean;
+  reachable: (p: Pt) => boolean;
+}
+
+function arrange(n: number, cx: number, shoulderY: number, s: number, rect: Rect, r: number): Arrangement {
   const reach = s * 1.65;
   const step = ((n <= 2 ? 62 : n === 3 ? 50 : n === 4 ? 40 : 34) * Math.PI) / 180;
   const top = rect.y + r * 1.1;
@@ -187,37 +228,54 @@ export function menuLayout(n: number, cx: number, shoulderY: number, s: number, 
       if (Math.hypot(cur.x - prev.x, dy) < need) cur.x = prev.x + dir * Math.sqrt(Math.max(0, need * need - dy * dy));
     }
   }
-  // At a screen edge some bubbles don't fit: keep the ones that do, and move
-  // the rest to the nearest free places on wider rings, never over the face.
+  // Keep the ones that fit; the rest (a screen edge, the head near the top, or
+  // pushed out of reach) go to the nearest free reachable places, never over
+  // the face, always above the shoulders.
   const m = r * 1.05;
   const inside = (p: Pt) => p.x - m >= rect.x && p.x + m <= rect.x + rect.w && p.y - m >= rect.y && p.y + m <= rect.y + rect.h;
   const offFace = (p: Pt) => Math.hypot(p.x - cx, p.y - headY) >= clear - 0.5;
-  const placed: Array<Pt | null> = at.map(() => null);
-  const apart = (p: Pt) => placed.every((q) => !q || Math.hypot(p.x - q.x, p.y - q.y) >= r * 2.1);
-  for (let i = 0; i < n; i++) if (inside(at[i]) && offFace(at[i]) && apart(at[i])) placed[i] = at[i];
-  if (placed.every((p) => p)) return { r, at };
-  const spots: Pt[] = [];
-  for (let k = 0; k < 4; k++) {
-    const far = reach + k * r * 2.2;
-    for (let deg = -150; deg <= 150; deg += 5) {
-      const a = (deg * Math.PI) / 180;
-      const p = { x: cx + Math.sin(a) * far, y: shoulderY - Math.cos(a) * far };
-      if (inside(p) && offFace(p)) spots.push(p);
+  // a palm reaches about 1.3 s from a shoulder, and a hand counts within r + 0.2 s
+  const reachable = (p: Pt) => Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY)) - r <= s * 1.5;
+  const a: Arrangement = { r, ideal: at, placed: at.map(() => null), offFace, reachable };
+  for (let i = 0; i < n; i++) if (inside(at[i]) && offFace(at[i]) && reachable(at[i]) && apart(a, at[i])) a.placed[i] = at[i];
+  if (a.placed.every((p) => p)) return a;
+  const box = s * 2 + r;
+  const near = grid(a, Math.max(rect.x + m, cx - box), Math.min(rect.x + rect.w - m, cx + box), Math.max(rect.y + m, shoulderY - box), shoulderY - s * 0.25).filter(reachable);
+  for (let i = 0; i < n; i++) if (!a.placed[i]) a.placed[i] = nearestFree(a, at[i], near);
+  return a;
+}
+
+/** Candidate places in a box, off the face. Above the shoulders only: hands at the chest (waving, clapping) never pick a game. */
+function grid(a: Arrangement, x0: number, x1: number, y0: number, y1: number): Pt[] {
+  const out: Pt[] = [];
+  const step = a.r * 0.3;
+  for (let y = y0; y <= y1; y += step)
+    for (let x = x0; x <= x1; x += step) {
+      const p = { x, y };
+      if (a.offFace(p)) out.push(p);
+    }
+  return out;
+}
+
+function apart(a: Arrangement, p: Pt): boolean {
+  return a.placed.every((q) => !q || Math.hypot(p.x - q.x, p.y - q.y) >= a.r * 2.1);
+}
+
+function nearestFree(a: Arrangement, want: Pt, list: Pt[]): Pt | null {
+  let best: Pt | null = null;
+  let bestD = Infinity;
+  for (const p of list) {
+    const d = Math.hypot(p.x - want.x, p.y - want.y);
+    if (d < bestD && apart(a, p)) {
+      best = p;
+      bestD = d;
     }
   }
-  for (let i = 0; i < n; i++) {
-    if (placed[i]) continue;
-    let best: Pt | null = null;
-    let bestD = Infinity;
-    for (const p of spots) {
-      const d = Math.hypot(p.x - at[i].x, p.y - at[i].y);
-      if (d < bestD && apart(p)) {
-        best = p;
-        bestD = d;
-      }
-    }
-    // no room anywhere (a tiny picture): at least stay on screen
-    placed[i] = best || { x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, at[i].x)), y: Math.max(rect.y + m, Math.min(rect.y + rect.h - m, at[i].y)) };
-  }
-  return { r, at: placed as Pt[] };
+  return best;
+}
+
+/** List order runs right to left around the child, so the remote's ◀ ▶ match the screen. */
+function finish(a: Arrangement, cx: number, shoulderY: number): { r: number; at: Pt[] } {
+  const around = (p: Pt) => Math.atan2(p.x - cx, shoulderY - p.y);
+  return { r: a.r, at: (a.placed as Pt[]).slice().sort((p, q) => around(q) - around(p)) };
 }

@@ -401,13 +401,16 @@ export class Sound {
   }
 
   /**
-   * Seconds since the music's first step on the audio clock (the kick drum
-   * falls every 4 steps), or null while no music is playing.
+   * Seconds since the music's first step as heard from the speakers (the kick
+   * drum falls every 4 steps), or null while no music is playing.
    */
   songTime(): number | null {
     const ctx = this.ctx;
     if (!this.musicTimer || !ctx || ctx.state !== 'running' || this.musicT0 === null) return null;
-    return ctx.currentTime - this.musicT0;
+    // sound leaves the speakers this much later (unknown on older browsers)
+    const out = ctx.outputLatency;
+    const latency = typeof out === 'number' && out > 0 && out < 0.5 ? out : 0;
+    return ctx.currentTime - latency - this.musicT0;
   }
 
   /** Seconds between kick drums of the current music. */
