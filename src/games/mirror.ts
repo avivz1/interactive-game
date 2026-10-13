@@ -94,9 +94,18 @@ export interface Match {
 /** The segment before each hand or foot segment (forearm after upper arm, shin after thigh). */
 const PARENT: Partial<Record<Segment, Segment>> = { lFore: 'lUpper', rFore: 'rUpper', lShin: 'lThigh', rShin: 'rThigh' };
 
-export function matchPose(points: ReadonlyArray<Pt | null>, pose: Pose): Match {
+/**
+ * How well the child copies `pose`. `topY` is the screen y of the top of the
+ * picture: an arm raised out of it (a grown-up, or a phone set low) is
+ * forgiven when it should point up.
+ */
+export function matchPose(points: ReadonlyArray<Pt | null>, pose: Pose, topY = -Infinity): Match {
   const joints = segmentJoints(points);
   const segs: Partial<Record<Segment, boolean | null>> = {};
+  const forgiven: Partial<Record<Segment, boolean>> = {};
+  const ls = points[LM.leftShoulder];
+  const rs = points[LM.rightShoulder];
+  const span = ls && rs ? Math.hypot(ls.x - rs.x, ls.y - rs.y) : 0;
   let total = 0;
   let n = 0;
   let matched = !!joints;
@@ -112,8 +121,11 @@ export function matchPose(points: ReadonlyArray<Pt | null>, pose: Pose): Match {
       // the hand should carry on the same way, it doesn't count against the pose.
       const parent = PARENT[seg];
       const parentAim = parent ? pose.aims[parent] : undefined;
-      const outOfPicture = !!p && !q && !!parent && segs[parent] === true && !!parentAim && angleDiff(parentAim.deg, aim.deg) <= 45;
-      if (outOfPicture) {
+      const outOfPicture = (!!p || (!!parent && !!forgiven[parent])) && !q && !!parent && (segs[parent] === true || !!forgiven[parent]) && !!parentAim && angleDiff(parentAim.deg, aim.deg) <= 45;
+      // An upper arm raised out of the top of the picture: the shoulder is near the top and the arm should point up.
+      const upAndOut = !!p && !q && !parent && p.y - topY < span * 1.1 && Math.sin((aim.deg * Math.PI) / 180) < -0.5;
+      if (outOfPicture || upAndOut) {
+        forgiven[seg] = true;
         total += 0.75;
         continue;
       }

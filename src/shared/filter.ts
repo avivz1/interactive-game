@@ -42,6 +42,15 @@ export class OneEuro {
   }
 }
 
+/** Arm points (elbows, wrists, fingers) and the point each hangs from. */
+const ARM_PARENT: Record<number, number> = { 13: 11, 14: 12, 15: 13, 16: 14, 17: 13, 18: 14, 19: 13, 20: 14, 21: 13, 22: 14 };
+/** An arm point at the picture's edge (a raised hand) is kept down to this visibility, while the arm above it is tracked. */
+const EDGE_THRESHOLD = 0.15;
+/** Arm points are held longer: raised hands at the edge flicker. */
+const ARM_HOLD_MS = 600;
+
+const nearEdge = (lm: Landmark) => lm.x < 0.1 || lm.x > 0.9 || lm.y < 0.1 || lm.y > 0.9;
+
 export interface SmootherOptions {
   /** Minimum visibility for a landmark to be used. */
   threshold?: number;
@@ -78,15 +87,20 @@ export class PoseSmoother {
         this.held[i] = null;
       }
       const lm = pose ? pose[i] : undefined;
-      if (lm && lm.visibility >= this.threshold) {
+      const parent = ARM_PARENT[i];
+      // MediaPipe reports a hand at (or just past) the edge of the picture with low
+      // visibility; keep it when the arm leading to it is clearly seen
+      const edgeOk = !!lm && !!pose && parent !== undefined && lm.visibility >= EDGE_THRESHOLD && nearEdge(lm) && !!pose[parent] && pose[parent].visibility >= this.threshold;
+      if (lm && (lm.visibility >= this.threshold || edgeOk)) {
         const p = { x: this.fx[i].filter(lm.x, tMs), y: this.fy[i].filter(lm.y, tMs), visibility: lm.visibility };
         this.held[i] = { x: p.x, y: p.y, visibility: p.visibility, t: tMs };
         out.push(p);
         continue;
       }
       const h = this.held[i];
-      if (h && tMs - h.t <= this.holdMs) {
-        out.push({ x: h.x, y: h.y, visibility: h.visibility * (1 - (tMs - h.t) / this.holdMs) });
+      const hold = parent !== undefined ? Math.max(this.holdMs, ARM_HOLD_MS) : this.holdMs;
+      if (h && tMs - h.t <= hold) {
+        out.push({ x: h.x, y: h.y, visibility: h.visibility * (1 - (tMs - h.t) / hold) });
       } else {
         this.held[i] = null;
         this.fx[i].reset();

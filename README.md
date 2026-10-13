@@ -3,13 +3,17 @@
 Motion games for kids on the TV. A phone is the camera: it streams video and
 body tracking to the TV over the home Wi-Fi.
 
-Current state: pairing + four games. The phone pairs with the TV (QR code
+Current state: pairing + six games, for children and grown-ups. The phone pairs with the TV (QR code
 or 6-digit code), the child sees themselves mirrored on the TV with glowing
 "magic gloves" on their hands, then:
 
-1. **Setup** — "step back until you fit" until the whole body is visible.
-2. **Menu** — the game bubbles float above the head; raise a hand onto one and
-   hold it (or use ◀ ▶ and OK on the remote).
+1. **Setup** — "step back until you fit" until the whole body is visible,
+   with room above the head for raised hands (else "step back" or "put the
+   phone a little higher").
+2. **Menu** — the game bubbles float above the head; reach a hand onto one and
+   hold it (or use ◀ ▶ and OK on the remote). When they don't all fit within
+   reach (a grown-up, a low phone, a child small in the picture), two show at a
+   time: sweep a hand sideways at chest height (or press ◀ ▶) for the others.
    Remote ▼ opens the **TV check** screen (connection and tracking details).
 3. **Tickle Pop** — hold a hand on the bubble-creatures to tickle them until
    they pop (a lifted foot works too). Sneezy ones pop their neighbours; sleepy
@@ -90,7 +94,8 @@ Optional:
    The bottom row shows the TV check (green ✓ / red ✗).
 3. On the phone, scan the QR code (or open `/phone` and type the code), check the
    two pictures match, tap **Yes — start the camera**, allow the camera.
-4. Stand the phone sideways 2–3 m away, back camera facing you.
+4. Stand the phone sideways at about waist height (around 1 m), 2.5–3 m away,
+   back camera facing you. Grown-ups: check your raised hands show on the TV.
 5. The TV shows **✅ This TV works!** when video and data arrive. Press **OK** on
    the remote for details; ←/→ shifts the body overlay timing.
 
@@ -109,7 +114,7 @@ npm run test:e2e  # Playwright: TV + phone pages with a fake camera
 
 `/phone/?pose=synthetic` replaces body tracking with a dancing stick figure
 (`&act=draw`: it draws a creature with one hand; `&act=still` stands still;
-`&act=dance` never stops dancing; `&act=armsup` raises both arms after 11 s; `&act=sweep` swings both arms in
+`&act=dance` never stops dancing; `&act=armsup` raises both arms after 11 s; `&act=swipe` sweeps a hand across the chest every 2.5 s; `&act=sweep` swings both arms in
 big circles after 11 s). `/tv/?round=10` shortens game
 rounds and `?draw=10` the drawing time (for testing).
 
@@ -125,4 +130,6 @@ Code map: `src/tv/session.ts` (link to the phone, sync, stats), `src/tv/stage.ts
 Dance rules and the movement meter), `src/games/limbs.ts` (which hands and feet
 may touch creatures), `src/games/mirror.ts` (Mirror Monster poses and matching), `src/games/rhythm.ts`
 (Bubble Beat chart, timing and spots), `src/games/boop.ts` + `src/tv/boop-art.ts`
-(Boop to Transform), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).
+(Boop to Transform), `src/games/fit.ts` (setup framing and the phone's view hints),
+`src/games/swipe.ts` (menu page sweeps), `tests/unit/framing.ts` (test people
+in front of a phone camera), `server/creature.ts` + `server/ai.ts` (creature AI endpoint).

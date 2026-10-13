@@ -1,6 +1,7 @@
-// Setup: guides the child to stand where the camera sees their whole body.
+// Setup: guides the player to stand where the camera sees their whole body,
+// with room for raised hands.
 
-import { evaluateFit, type FitState } from '../../games/fit';
+import { evaluateFit, roomBelowFeet, type FitState } from '../../games/fit';
 import { t } from '../../shared/i18n';
 import type { VoiceKey } from '../audio';
 import { drawBody } from '../draw';
@@ -20,6 +21,7 @@ const FIT_VOICE: Record<FitState, VoiceKey> = {
   'too-close': 'close',
   'feet-cut': 'feet',
   'too-far': 'far',
+  'hands-cut': 'hands_cut',
   ok: 'ok',
 };
 
@@ -104,10 +106,13 @@ export class SetupScene implements Scene {
 
     const titleY = height * 0.1;
     panel(ctx, width * 0.12, titleY - height * 0.055, width * 0.76, height * 0.11, height * 0.03, 'rgba(11, 16, 32, 0.7)');
-    label(ctx, t(('fit.' + this.state) as 'fit.ok'), width / 2, titleY, height * 0.05, ok ? '#7dffa1' : '#fff');
+    const text = this.state === 'hands-cut' && roomBelowFeet(frame.landmarks) ? t('fit.hands-cut-phone') : t(('fit.' + this.state) as 'fit.ok');
+    label(ctx, text, width / 2, titleY, height * 0.05, ok ? '#7dffa1' : '#fff');
     if (ok) ring(ctx, { x: width * 0.84, y: titleY }, height * 0.035, this.okFor / HOLD_SEC, '#7dffa1', height * 0.012);
 
     const tips: string[] = [t('setup.space')];
+    // an upright phone gives a narrow picture: little room for arms out to the sides
+    if (frame.rect.w < frame.rect.h) tips.push(t('setup.sideways'));
     if (!this.stage.sound.ready) tips.push(t('hint.sound'));
     else if (this.elapsed > SKIP_HINT_AFTER_SEC) tips.push(t('hint.skip'));
     tips.forEach((t, i) => label(ctx, t, width / 2, height * (0.86 + i * 0.06), height * 0.035, '#ffd600'));

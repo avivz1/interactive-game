@@ -35,7 +35,11 @@ export function buildBody(landmarks: ReadonlyArray<Landmark | null>, rect: Rect,
   const ls = at(LM.leftShoulder);
   const rs = at(LM.rightShoulder);
   const shoulderWidth = ls && rs ? Math.max(dist(ls, rs), rect.h * 0.04) : rect.h * 0.12;
-  const hands = [palm(at(LM.leftWrist), at(LM.leftElbow)), palm(at(LM.rightWrist), at(LM.rightElbow))];
+  // a palm reaching past the edge of the picture (a raised hand) stays just inside it
+  const inset = Math.min(Math.max(14, shoulderWidth * 0.3), rect.w * 0.1, rect.h * 0.1);
+  const inside = (p: Pt | null): Pt | null =>
+    p && { x: Math.max(rect.x + inset, Math.min(rect.x + rect.w - inset, p.x)), y: Math.max(rect.y + inset, Math.min(rect.y + rect.h - inset, p.y)) };
+  const hands = [inside(palm(at(LM.leftWrist), at(LM.leftElbow))), inside(palm(at(LM.rightWrist), at(LM.rightElbow)))];
   const head = at(LM.nose);
   const le = at(LM.leftEar);
   const re = at(LM.rightEar);

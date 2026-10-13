@@ -35,6 +35,8 @@ export const VOICE_KEYS = [
   'perfect',
   'boop_intro',
   'surprise',
+  'hands_cut',
+  'swipe',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

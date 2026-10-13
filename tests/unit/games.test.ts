@@ -102,8 +102,19 @@ describe('Dwell', () => {
     const d = new Dwell(1000);
     expect(d.update(true, 600)).toBe(false);
     expect(d.update(false, 100)).toBe(false);
-    expect(d.progress).toBeCloseTo(0.4);
-    expect(d.update(true, 700)).toBe(true);
+    // a short slip doesn't drain it
+    expect(d.progress).toBeCloseTo(0.6);
+    expect(d.update(true, 400)).toBe(true);
+    expect(d.progress).toBe(0);
+  });
+
+  it('drains after the hand has been away a while', () => {
+    const d = new Dwell(1000, 600);
+    d.update(true, 600);
+    for (let i = 0; i < 10; i++) d.update(false, 100); // 1 s away: 0.4 s of draining
+    expect(d.progress).toBeCloseTo(0.2);
+    d.update(true, 100);
+    for (let i = 0; i < 30; i++) d.update(false, 100);
     expect(d.progress).toBe(0);
   });
 });
@@ -241,68 +252,60 @@ describe('menu layout with five games', () => {
   }
 });
 
-describe('menu layout with five games: reach and order', () => {
+/** A menu page that fits: all games if they fit, else two at a time, else one. */
+async function pageLayout(n: number, cx: number, shoulderY: number, s: number, rect: { x: number; y: number; w: number; h: number }) {
+  const { menuLayout } = await import('../../src/tv/scenes/menu');
+  for (const k of [n, 2, 1]) {
+    const l = menuLayout(Math.min(n, k), cx, shoulderY, s, rect);
+    if (l.ok) return { k: Math.min(n, k), ...l };
+  }
+  return { k: 1, ...menuLayout(1, cx, shoulderY, s, rect) };
+}
+
+/** Every bubble of a layout that says it fits: apart, reachable, above the shoulders, off the face, inside, in order. */
+function expectGood(l: { r: number; at: Array<{ x: number; y: number }> }, cx: number, shoulderY: number, s: number, rect: { x: number; y: number; w: number; h: number }) {
+  const { r, at } = l;
+  for (let i = 0; i < at.length; i++)
+    for (let j = i + 1; j < at.length; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
+  for (const p of at) {
+    const fromShoulder = Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY));
+    expect(fromShoulder - r).toBeLessThanOrEqual(s * 1.5 + 0.5);
+    expect(p.y).toBeLessThanOrEqual(shoulderY - s * 0.25 + 0.5); // above the shoulders: hands at the chest never pick
+    expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
+    expect(p.x - r).toBeGreaterThanOrEqual(rect.x);
+    expect(p.x + r).toBeLessThanOrEqual(rect.x + rect.w);
+    expect(p.y - r).toBeGreaterThanOrEqual(rect.y);
+  }
+  const around = at.map((p) => Math.atan2(p.x - cx, shoulderY - p.y));
+  for (let i = 1; i < around.length; i++) expect(around[i]).toBeLessThan(around[i - 1]);
+}
+
+describe('menu layout: all games, or fewer at a time when they do not fit', () => {
   const big = { x: 0, y: 0, w: 1920, h: 1080 };
   const small = { x: 0, y: 0, w: 1280, h: 720 };
-  // the last field: the child stands near a side edge, where not everything fits within reach (one step in helps)
+  // [rect, cx, shoulderY, shoulder width, all six should fit]
   const cases: Array<[typeof big, number, number, number, boolean]> = [
+    [big, 960, 500, 150, true],
+    [big, 700, 350, 150, true],
     [big, 960, 241, 159, false],
     [big, 960, 200, 130, false],
     [big, 1500, 220, 184, false],
     [small, 640, 200, 200, false],
-    [big, 1700, 370, 159, true],
-    [big, 1720, 370, 159, true],
-    [big, 127, 370, 159, true],
+    [big, 1700, 370, 159, false],
+    [big, 127, 370, 159, false],
+    [big, 60, 180, 150, false],
+    [big, 1860, 240, 150, false],
   ];
-  for (const [rect, cx, shoulderY, s, edge] of cases) {
-    it(`every bubble is reachable, off the hips, and in order around the child (${cx},${shoulderY}, s ${s})`, async () => {
-      const { menuLayout } = await import('../../src/tv/scenes/menu');
-      const { r, at } = menuLayout(5, cx, shoulderY, s, rect);
-      for (const p of at) {
-        const fromShoulder = Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY));
-        if (!edge) expect(fromShoulder - r).toBeLessThanOrEqual(s * 1.5 + 0.5);
-        expect(p.x - r).toBeGreaterThanOrEqual(0);
-        expect(p.x + r).toBeLessThanOrEqual(rect.w);
-        expect(p.y).toBeLessThanOrEqual(shoulderY - s * 0.25); // above the shoulders: hands at the chest never pick
-        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
-      }
-      const around = at.map((p) => Math.atan2(p.x - cx, shoulderY - p.y));
-      for (let i = 1; i < around.length; i++) expect(around[i]).toBeLessThan(around[i - 1]);
-    });
-  }
-});
-
-describe('menu layout with five games at a corner', () => {
-  it('never stacks bubbles, even with the head at the top by the side edge', async () => {
-    const { menuLayout } = await import('../../src/tv/scenes/menu');
-    const rect = { x: 0, y: 0, w: 1920, h: 1080 };
-    for (const cx of [60, 1860])
-      for (const shoulderY of [180, 240]) {
-        const { r, at } = menuLayout(5, cx, shoulderY, 150, rect);
-        for (let i = 0; i < 5; i++)
-          for (let j = i + 1; j < 5; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
-        for (const p of at) expect(Math.hypot(p.x - cx, p.y - (shoulderY - 150 * 0.75))).toBeGreaterThanOrEqual(r + 150 * 0.45);
-      }
-  });
-});
-
-describe('menu layout with six games', () => {
-  const rect = { x: 0, y: 0, w: 1920, h: 1080 };
-  for (const [cx, shoulderY, s] of [[960, 500, 150], [960, 241, 159], [700, 350, 150], [1300, 300, 170]] as Array<[number, number, number]>) {
-    it(`keeps six bubbles apart, reachable, above the shoulders and in order (child at ${cx},${shoulderY})`, async () => {
-      const { menuLayout } = await import('../../src/tv/scenes/menu');
-      const { r, at } = menuLayout(6, cx, shoulderY, s, rect);
-      expect(at).toHaveLength(6);
-      for (let i = 0; i < 6; i++)
-        for (let j = i + 1; j < 6; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThanOrEqual(r * 2);
-      for (const p of at) {
-        const fromShoulder = Math.min(Math.hypot(p.x - (cx - s * 0.5), p.y - shoulderY), Math.hypot(p.x - (cx + s * 0.5), p.y - shoulderY));
-        expect(fromShoulder - r).toBeLessThanOrEqual(s * 1.5 + 0.5);
-        expect(p.y).toBeLessThanOrEqual(shoulderY);
-        expect(Math.hypot(p.x - cx, p.y - (shoulderY - s * 0.75))).toBeGreaterThanOrEqual(r + s * 0.45);
-      }
-      const around = at.map((p) => Math.atan2(p.x - cx, shoulderY - p.y));
-      for (let i = 1; i < around.length; i++) expect(around[i]).toBeLessThan(around[i - 1]);
-    });
-  }
+  for (const n of [5, 6])
+    for (const [rect, cx, shoulderY, s, fits] of cases) {
+      it(`${n} games, child at ${cx},${shoulderY} (s ${s})`, async () => {
+        const { menuLayout } = await import('../../src/tv/scenes/menu');
+        const all = menuLayout(n, cx, shoulderY, s, rect);
+        if (fits) expect(all.ok).toBe(true);
+        if (all.ok) expectGood(all, cx, shoulderY, s, rect);
+        const page = await pageLayout(n, cx, shoulderY, s, rect);
+        expect(page.ok).toBe(true);
+        expectGood(page, cx, shoulderY, s, rect);
+      });
+    }
 });

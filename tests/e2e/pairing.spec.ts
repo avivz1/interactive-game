@@ -2,8 +2,11 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 
 /** Every TV and phone context a test opens; closed after it, so streams don't pile up. */
 const opened: BrowserContext[] = [];
+/** Uncaught errors on any page a test opens: they fail the test. */
+const pageErrors: string[] = [];
 test.afterEach(async () => {
   await Promise.all(opened.splice(0).map((ctx) => ctx.close().catch(() => undefined)));
+  expect(pageErrors.splice(0)).toEqual([]);
 });
 
 interface TvDebug {
@@ -29,6 +32,7 @@ async function openTv(browser: Browser, path = '/tv/', lang: 'en' | 'default' = 
   opened.push(ctx);
   if (lang === 'en') await ctx.addInitScript(english);
   const tv = await ctx.newPage();
+  tv.on('pageerror', (e) => pageErrors.push('tv: ' + e.message));
   await tv.goto(path);
   await expect(tv.getByTestId('pair-code')).toHaveText(/^\d{3} \d{3}$/, { timeout: 15_000 });
   return tv;
@@ -39,6 +43,7 @@ async function openPhone(browser: Browser, path: string, lang: 'en' | 'default' 
   opened.push(ctx);
   if (lang === 'en') await ctx.addInitScript(english);
   const phone = await ctx.newPage();
+  phone.on('pageerror', (e) => pageErrors.push('phone: ' + e.message));
   await phone.goto(path);
   return phone;
 }
@@ -157,6 +162,18 @@ test('setup leads to the menu, a full Tickle Pop round, and back', async ({ brow
   await expect.poll(() => debugValue(tv, 'ended'), { timeout: 20_000 }).toBe(true);
   expect(await debugValue(tv, 'stars')).toBeGreaterThanOrEqual(1);
   await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
+});
+
+test('menu: when the games do not all fit, a quick sweep of the hand flips the page', async ({ browser }) => {
+  const tv = await openTv(browser);
+  await pairPhone(browser, tv, '/phone/?pose=synthetic&act=swipe');
+  await expectStreaming(tv);
+  await expect.poll(() => debugValue(tv, 'scene'), { timeout: 15_000 }).toBe('menu');
+  // the test figure's head is near the top of the picture: two games at a time
+  await expect.poll(() => debugValue(tv, 'menuPer'), { timeout: 5_000 }).toBe(2);
+  const first = (await debugValue(tv, 'menuPage')) as number;
+  await expect.poll(() => debugValue(tv, 'menuPage'), { timeout: 15_000 }).not.toBe(first);
+  expect(await debugValue(tv, 'scene')).toBe('menu');
 });
 
 test('Hebrew by default, and the language chosen on the phone reaches the TV', async ({ browser }) => {

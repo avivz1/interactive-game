@@ -7,7 +7,7 @@ import { VOICE_KEYS } from '../../src/tv/audio';
 describe('i18n', () => {
   it('defaults to Hebrew', () => {
     expect(getLang()).toBe('he');
-    expect(t('menu.title')).toBe('הרימו יד אל משחק כדי לשחק!');
+    expect(t('menu.title')).toBe('שלחו יד אל משחק כדי לשחק!');
   });
 
   it('switches language and fills placeholders', () => {

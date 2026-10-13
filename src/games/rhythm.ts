@@ -209,9 +209,16 @@ export function spotLayout(cx: number, shoulderY: number, floor: number, s: numb
     x: Math.max(rect.x + m, Math.min(rect.x + rect.w - m, p.x)),
     y: Math.max(rect.y + m, Math.min(rect.y + rect.h - m, p.y)),
   });
+  // Hand spots sit out to the sides at reach; with little room above (a
+  // grown-up's head near the top) they turn down along that reach so a hand
+  // on them stays in the picture, rather than being squashed into the top.
+  const reach = s * Math.hypot(1.45, 0.55);
+  const top = rect.y + Math.max(r * 1.1, rect.h * 0.08);
+  let a = Math.atan2(1.45, 0.55);
+  if (shoulderY - Math.cos(a) * reach < top) a = Math.min((100 * Math.PI) / 180, Math.acos(Math.max(-1, Math.min(1, (shoulderY - top) / reach))));
   const at: Record<SpotId, Pt> = {
-    handL: clamp({ x: cx - s * 1.45, y: shoulderY - s * 0.55 }),
-    handR: clamp({ x: cx + s * 1.45, y: shoulderY - s * 0.55 }),
+    handL: clamp({ x: cx - Math.sin(a) * reach, y: shoulderY - Math.cos(a) * reach }),
+    handR: clamp({ x: cx + Math.sin(a) * reach, y: shoulderY - Math.cos(a) * reach }),
     footL: clamp({ x: cx - s * 0.95, y: floor - s * 0.45 }),
     footR: clamp({ x: cx + s * 0.95, y: floor - s * 0.45 }),
   };

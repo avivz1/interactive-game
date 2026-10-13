@@ -246,15 +246,21 @@ export class BoopGame {
     return 'high';
   }
 
-  /** A random place in a zone, relative to the child (shoulder widths). */
-  private sample(zone: Zone): { ox: number; oy: number } {
+  /**
+   * A random place in a zone, relative to the child (shoulder widths). Up high
+   * stays under the top of the picture (`highest`, in shoulder widths above the
+   * shoulders), so a reaching hand stays in view; with no room there it goes out to the side.
+   */
+  private sample(zone: Zone, highest = Infinity): { ox: number; oy: number } {
     const side = this.rand() < 0.5 ? -1 : 1;
+    const lo = Math.max(-1.5, -highest);
+    if (zone === 'high' && lo > -0.4) zone = 'side';
     if (zone === 'side') return { ox: side * (1.3 + this.rand() * 0.6), oy: -0.3 + this.rand() * 0.8 };
     // a kick out to the side, clear of the standing leg
     if (zone === 'low') return { ox: side * (0.85 + this.rand() * 0.45), oy: -0.45 - this.rand() * 0.2 };
     // up high: beside the head, or now and then right over it
-    if (this.rand() < 0.25) return { ox: (this.rand() - 0.5) * 0.8, oy: -1.8 - this.rand() * 0.15 };
-    return { ox: side * (0.9 + this.rand() * 0.9), oy: -0.4 - this.rand() * 1.1 };
+    if (this.rand() < 0.25 && highest >= 1.95) return { ox: (this.rand() - 0.5) * 0.8, oy: -1.8 - this.rand() * 0.15 };
+    return { ox: side * (0.9 + this.rand() * 0.9), oy: lo + this.rand() * (-0.4 - lo) };
   }
 
   /**
@@ -264,8 +270,15 @@ export class BoopGame {
    */
   private badness(zone: Zone, ox: number, oy: number, r: number, env: BoopEnv, self: Critter | null, away: Pt | null): number {
     const u = env.unit;
-    const p = clampTo(placeOf(zone, ox, oy, env), r, env.rect);
+    const wanted = placeOf(zone, ox, oy, env);
+    const p = clampTo(wanted, r, env.rect);
     let bad = 0;
+    // squashed against the edge of the picture (a grown-up's head near the top): somewhere else is better
+    const squashed = Math.hypot(p.x - wanted.x, p.y - wanted.y);
+    if (squashed > u * 0.1) bad += (squashed - u * 0.1) * 2;
+    // a hand reaching right at the top would leave the picture
+    const top = env.rect.y + Math.max(r * 1.05, env.rect.h * 0.08);
+    if (p.y < top) bad += (top - p.y) * 2;
     const head = headOf(env);
     const face = Math.hypot(p.x - head.x, p.y - head.y);
     if (face < r + u * 0.6) bad += (r + u * 0.6 - face) * 4;
@@ -292,9 +305,11 @@ export class BoopGame {
     const away = self ? { x: self.x, y: self.y } : null;
     let best: { zone: Zone; ox: number; oy: number } | null = null;
     let bestBad = Infinity;
+    const top = env.rect.y + Math.max(r * 1.05, env.rect.h * 0.08);
+    const highest = (env.shoulderY - top) / env.unit;
     for (let i = 0; i < 32; i++) {
       const zone = prefer && i < 16 ? prefer : this.pickZone(env, self ? self.zone : null);
-      const s = this.sample(zone);
+      const s = this.sample(zone, highest);
       const bad = this.badness(zone, s.ox, s.oy, r, env, self, away);
       if (bad < bestBad) {
         best = { zone, ox: s.ox, oy: s.oy };

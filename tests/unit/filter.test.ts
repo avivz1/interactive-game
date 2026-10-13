@@ -37,6 +37,34 @@ describe('PoseSmoother', () => {
     const s = new PoseSmoother({ threshold: 0.3 });
     expect(s.update(lm(0.2, 0.3), 0, 1)[0]!.x).toBeCloseTo(0.2);
   });
+
+  // a raised arm: shoulder, elbow and a wrist at (or past) the top edge of the picture
+  const arm = (wristVis: number, elbowVis = 0.9) => {
+    const pts = new Array(33).fill(null).map(() => ({ x: 0.5, y: 0.5, visibility: 0 }));
+    pts[11] = { x: 0.6, y: 0.4, visibility: 0.9 };
+    pts[13] = { x: 0.62, y: 0.12, visibility: elbowVis };
+    pts[15] = { x: 0.63, y: -0.03, visibility: wristVis };
+    return pts;
+  };
+
+  it('keeps a hand at the edge of the picture while the arm leading to it is seen', () => {
+    const s = new PoseSmoother();
+    for (let t = 0; t <= 2000; t += 33) expect(s.update(arm(0.15), t)[15]).not.toBeNull();
+  });
+
+  it('drops a low-confidence hand when the arm is not seen either', () => {
+    const s = new PoseSmoother();
+    s.update(arm(0.9), 0);
+    expect(s.update(arm(0.15, 0.1), 300)[15]).not.toBeNull(); // held a while
+    expect(s.update(arm(0.15, 0.1), 700)[15]).toBeNull();
+  });
+
+  it('never accepts a low-confidence point in the middle of the picture', () => {
+    const s = new PoseSmoother();
+    const pts = arm(0.15);
+    pts[15] = { x: 0.5, y: 0.5, visibility: 0.15 };
+    expect(s.update(pts, 0)[15]).toBeNull();
+  });
 });
 
 describe('body', () => {
@@ -57,5 +85,19 @@ describe('body', () => {
     expect(body.head).toEqual({ x: 500, y: 125 });
     expect(body.headRadius).toBeCloseTo(70);
     expect(body.hands).toEqual([null, null]);
+  });
+
+  it('keeps a palm that reaches past the edge of the picture just inside it', () => {
+    const pts = new Array(33).fill(null);
+    pts[11] = { x: 0.6, y: 0.4, visibility: 1 };
+    pts[12] = { x: 0.4, y: 0.4, visibility: 1 };
+    pts[13] = { x: 0.62, y: 0.1, visibility: 1 }; // elbow
+    pts[15] = { x: 0.63, y: -0.02, visibility: 1 }; // wrist above the picture
+    const rect = { x: 100, y: 0, w: 800, h: 500 };
+    const body = buildBody(pts, rect, true);
+    const hand = body.hands[0]!;
+    expect(hand.y).toBeGreaterThan(rect.y);
+    expect(hand.x).toBeGreaterThan(rect.x);
+    expect(hand.x).toBeLessThan(rect.x + rect.w);
   });
 });

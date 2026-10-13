@@ -116,7 +116,7 @@ export class MirrorScene implements Scene {
       return;
     }
 
-    this.match = g.phase === 'pose' ? matchPose(body.points, g.pose) : null;
+    this.match = g.phase === 'pose' ? matchPose(body.points, g.pose, frame.rect.y) : null;
     const events = g.update(dt, this.match);
     for (const e of events) this.react(e, unit);
     if (this.clock - this.lastDebug > 0.5) {

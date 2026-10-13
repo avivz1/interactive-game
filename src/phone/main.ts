@@ -8,9 +8,10 @@ import { HttpError, apiFetch, sleep } from '../shared/http';
 import { LANGS, apiErrorText, applyDocumentLang, emojiText, getLang, onLangChange, setLang, t } from '../shared/i18n';
 import { encodePose, parseCtl } from '../shared/protocol';
 import { checkLan, waitForConnected, type SelectedPair } from '../shared/rtc';
+import { viewHint } from '../games/fit';
 import { ScreenWakeLock, cameraErrorMessage, openCamera, type Facing } from './camera';
 import type { Landmark } from '../shared/landmarks';
-import { MediaPipePose, SyntheticPose, syntheticArmsUp, syntheticDancer, syntheticDrawer, syntheticStill, syntheticSweeper, type PoseSource } from './pose';
+import { MediaPipePose, SyntheticPose, syntheticArmsUp, syntheticDancer, syntheticDrawer, syntheticStill, syntheticSweeper, syntheticSwiper, type PoseSource } from './pose';
 import { NotLocalError, Sender } from './sender';
 
 const root = document.getElementById('app') as HTMLElement;
@@ -288,14 +289,21 @@ function setTrackStatus(text: () => string): void {
 
 async function startTracking(state: Live): Promise<void> {
   const act = new URLSearchParams(location.search).get('act');
-  const figures: Record<string, (tSec: number) => Landmark[]> = { draw: syntheticDrawer, still: syntheticStill, dance: syntheticDancer, armsup: syntheticArmsUp, sweep: syntheticSweeper };
+  const figures: Record<string, (tSec: number) => Landmark[]> = { draw: syntheticDrawer, still: syntheticStill, dance: syntheticDancer, armsup: syntheticArmsUp, sweep: syntheticSweeper, swipe: syntheticSwiper };
   const figure = act ? figures[act] : undefined;
   const pose: PoseSource = synthetic ? new SyntheticPose(figure) : new MediaPipePose();
   state.pose = pose;
   let seq = 0;
+  // what the camera sees, for the set-up hint (nobody there, head or hands cut off)
+  let lastPose: Landmark[] | null = null;
+  let lastBodyAt = 0;
   try {
     setTrackStatus(() => t('ph.loading_tracking'));
     await pose.start(state.video, (landmarks, captureTime) => {
+      if (landmarks) {
+        lastPose = landmarks;
+        lastBodyAt = performance.now();
+      }
       const ch = state.sender.pose;
       if (!ch || ch.readyState !== 'open' || ch.bufferedAmount > 8192) return;
       ch.send(encodePose(seq++, captureTime, landmarks));
@@ -313,7 +321,14 @@ async function startTracking(state: Live): Promise<void> {
       state.sender.sendCtl({ t: 'stats', fps: pose.fps, inferMs: pose.inferMs, model: pose.model });
       const fps = pose.fps.toFixed(0);
       const ms = pose.inferMs ? ' · ' + pose.inferMs.toFixed(0) + ' ms' : '';
-      setTrackStatus(() => t('ph.tracking', { fps }) + ms + ' · ' + pose.model);
+      const hint = viewHint(lastPose, performance.now() - lastBodyAt);
+      const upright = state.video.videoHeight > state.video.videoWidth;
+      setTrackStatus(() => {
+        const lines = [t('ph.tracking', { fps }) + ms + ' · ' + pose.model];
+        if (hint) lines.unshift(t(hint === 'no-one' ? 'ph.no_one' : 'ph.cut'));
+        if (upright) lines.push(t('ph.sideways'));
+        return lines.join(' · ');
+      });
     }, 2000),
   );
 }

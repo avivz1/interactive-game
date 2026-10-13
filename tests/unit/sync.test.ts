@@ -35,6 +35,21 @@ describe('PoseTimeline', () => {
     expect(tl.sampleAt(250)![0].x).toBeCloseTo(0.4);
   });
 
+  it('uses the sample that saw a point when the other lost it', () => {
+    const tl = new PoseTimeline();
+    tl.push({ t: 0, landmarks: [{ x: 0.2, y: 0.05, visibility: 0.6 }] });
+    tl.push({ t: 100, landmarks: [{ x: 0.9, y: 0.9, visibility: 0.15 }] });
+    const p = tl.sampleAt(70)![0];
+    expect(p.x).toBeCloseTo(0.2);
+    expect(p.visibility).toBeCloseTo(0.6);
+    // both seen: position and visibility both blend
+    tl.push({ t: 200, landmarks: [{ x: 0.6, y: 0.5, visibility: 1 }] });
+    tl.push({ t: 300, landmarks: [{ x: 0.8, y: 0.5, visibility: 0.5 }] });
+    const q = tl.sampleAt(250)![0];
+    expect(q.x).toBeCloseTo(0.7);
+    expect(q.visibility).toBeCloseTo(0.75);
+  });
+
   it('returns null for stale data and nearest when a body is missing', () => {
     const tl = new PoseTimeline();
     tl.push({ t: 0, landmarks: pose(0.1) });

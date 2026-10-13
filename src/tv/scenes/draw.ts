@@ -226,8 +226,12 @@ export class DrawScene implements Scene {
       left = cx - s * 0.4;
       right = cx + s * 0.4;
     }
-    const by = Math.max(rect.y + rect.h * 0.02, sy - s * 1.5);
-    const target: Box = { x: left, y: by, w: right - left, h: Math.min(rect.y + rect.h, sy + s * 0.65) - by };
+    // not right at the top of the picture: a hand drawing there would leave it
+    // (a grown-up's head is near the top); the board grows down a little instead
+    const top = rect.y + rect.h * 0.08;
+    const by = Math.max(top, sy - s * 1.5);
+    const lost = Math.min(s * 0.6, Math.max(0, top - (sy - s * 1.5)));
+    const target: Box = { x: left, y: by, w: right - left, h: Math.min(rect.y + rect.h, sy + s * 0.65 + lost) - by };
     this.lineW = Math.max(8, s * 0.11);
     if (!this.board || !this.buttons) {
       this.board = target;

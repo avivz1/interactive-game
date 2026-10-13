@@ -2,16 +2,33 @@ import { t } from '../shared/i18n';
 
 export type Facing = 'environment' | 'user';
 
-export function openCamera(facing: Facing): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({
+/**
+ * Opens the camera with a 4:3 picture: the sensor's full height (a 16:9
+ * picture crops a quarter of it), so raised hands and feet both fit. If the
+ * browser still gives a wide picture, it asks once more for 4:3 exactly.
+ */
+export async function openCamera(facing: Facing, devices: Pick<MediaDevices, 'getUserMedia'> = navigator.mediaDevices): Promise<MediaStream> {
+  const stream = await devices.getUserMedia({
     audio: false,
     video: {
       facingMode: { ideal: facing },
-      width: { ideal: 1280 },
+      aspectRatio: { ideal: 4 / 3 },
       height: { ideal: 720 },
       frameRate: { ideal: 30, max: 30 },
     },
   });
+  const track = stream.getVideoTracks()[0];
+  const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : {};
+  const w = settings.width || 0;
+  const h = settings.height || 0;
+  if (track && w > 0 && h > 0 && Math.max(w, h) / Math.min(w, h) > 1.5) {
+    try {
+      await track.applyConstraints({ aspectRatio: { exact: 4 / 3 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } });
+    } catch {
+      // keep the wide picture
+    }
+  }
+  return stream;
 }
 
 export function cameraErrorMessage(err: unknown): string {

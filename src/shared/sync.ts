@@ -10,6 +10,8 @@ export interface TimedPose {
 }
 
 const STALE_MS = 500;
+/** Visibility the TV trusts (its smoother's threshold). */
+const GOOD = 0.3;
 
 export class PoseTimeline {
   private items: TimedPose[] = [];
@@ -51,10 +53,17 @@ export class PoseTimeline {
     for (let k = 0; k < a.landmarks.length; k++) {
       const p = a.landmarks[k];
       const q = b.landmarks[k];
+      // one sample lost the point (a hand at the edge): use the other one rather than dropping it
+      const pGood = p.visibility >= GOOD;
+      const qGood = q.visibility >= GOOD;
+      if (pGood !== qGood) {
+        out.push(pGood ? p : q);
+        continue;
+      }
       out.push({
         x: p.x + (q.x - p.x) * f,
         y: p.y + (q.y - p.y) * f,
-        visibility: Math.min(p.visibility, q.visibility),
+        visibility: p.visibility + (q.visibility - p.visibility) * f,
       });
     }
     return out;

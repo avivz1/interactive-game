@@ -145,6 +145,16 @@
       "en": "[excited] Surprise!",
       "he": "[excited] הפתעה!",
       "ar": "[excited] مفاجأة!"
+    },
+    "hands_cut": {
+      "en": "Step back a little, so I can see your hands up high!",
+      "he": "קחו צעד אחורה, כדי שאראה את הידיים למעלה!",
+      "ar": "ارجعوا خطوة إلى الوراء، حتى أرى أيديكم للأعلى!"
+    },
+    "swipe": {
+      "en": "Swipe your hand to the side to see more games!",
+      "he": "הניפו את היד לצד כדי לראות עוד משחקים!",
+      "ar": "حرّكوا أيديكم إلى الجانب لرؤية ألعاب أخرى!"
     }
   }
 }

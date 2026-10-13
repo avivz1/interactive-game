@@ -17,9 +17,22 @@ const MIN_INTERVAL_MS = 30; // ~33 Hz cap
 /** Frames measured before deciding whether to switch models. */
 const EVAL_FRAMES = 60;
 /** Upgrade lite -> full when lite runs faster than this (ms per frame). */
-const UPGRADE_MS = 22;
+const UPGRADE_MS = 30;
 /** Fall back full -> lite when full is slower than this. */
 const DOWNGRADE_MS = 45;
+/** After falling back to lite, try full again this much later (the phone may have cooled down). */
+const RETRY_FULL_MS = 60_000;
+/** Detection, presence and tracking confidence (MediaPipe's default is 0.5): small or far players are found more often. */
+const MIN_CONFIDENCE = 0.4;
+
+/**
+ * Which model to switch to after measuring `avgMs` per frame on `current`, or
+ * null to stay. `fullTriedAt` is when full was last tried (null: never).
+ */
+export function nextModel(current: PoseModel, avgMs: number, fullTriedAt: number | null, now: number): PoseModel | null {
+  if (current === 'lite') return avgMs < UPGRADE_MS && (fullTriedAt === null || now - fullTriedAt >= RETRY_FULL_MS) ? 'full' : null;
+  return avgMs > DOWNGRADE_MS ? 'lite' : null;
+}
 
 export type PoseModel = keyof typeof MODEL_URLS;
 
@@ -69,7 +82,7 @@ export class MediaPipePose implements PoseSource {
   private landmarker: Vision.PoseLandmarker | null = null;
   private currentModel: PoseModel = 'lite';
   private framesOnModel = 0;
-  private triedFull = false;
+  private fullTriedAt: number | null = null;
   private switching = false;
   private video: VideoWithFrames | null = null;
   private onPose: PoseHandler | null = null;
@@ -97,6 +110,9 @@ export class MediaPipePose implements PoseSource {
       baseOptions: { modelAssetPath: MODEL_URLS[model], delegate },
       runningMode: 'VIDEO',
       numPoses: 1,
+      minPoseDetectionConfidence: MIN_CONFIDENCE,
+      minPosePresenceConfidence: MIN_CONFIDENCE,
+      minTrackingConfidence: MIN_CONFIDENCE,
     });
   }
 
@@ -117,12 +133,11 @@ export class MediaPipePose implements PoseSource {
   /** Called after each frame: switch models when the measured speed says so. */
   private maybeSwitch(): void {
     if (this.switching || ++this.framesOnModel < EVAL_FRAMES) return;
-    if (this.currentModel === 'lite' && !this.triedFull && this.avgInfer < UPGRADE_MS) {
-      this.triedFull = true;
-      void this.swapTo('full');
-    } else if (this.currentModel === 'full' && this.avgInfer > DOWNGRADE_MS) {
-      void this.swapTo('lite');
-    }
+    const now = performance.now();
+    const next = nextModel(this.currentModel, this.avgInfer, this.fullTriedAt, now);
+    if (!next) return;
+    if (next === 'full') this.fullTriedAt = now;
+    void this.swapTo(next);
   }
 
   private async swapTo(model: PoseModel): Promise<void> {
@@ -273,13 +288,30 @@ function drawScriptAt(tSec: number): [number, number] {
 /** The synthetic figure dancing hard: bouncing with both arms waving (`act=dance`). */
 export function syntheticDancer(tSec: number): Landmark[] {
   const pts = syntheticFigure(tSec);
-  const bounce = Math.sin(tSec * 8) * 0.04;
+  // bounces down (knees bending), never up: the head keeps its room at the top
+  const bounce = Math.abs(Math.sin(tSec * 8)) * 0.04;
   const wave = Math.sin(tSec * 6) * 0.1;
   return pts.map((p, i) => {
     if (!p.visibility) return p;
     const arm = i === LM.leftWrist || i === LM.rightWrist ? wave : i === LM.leftElbow || i === LM.rightElbow ? wave * 0.5 : 0;
     return { x: p.x, y: p.y + bounce - arm, visibility: p.visibility };
   });
+}
+
+/**
+ * The synthetic figure that, after 4 s, sweeps its hand quickly across the
+ * chest every 2.5 s and brings it back slowly (`act=swipe`, for menu page tests).
+ */
+export function syntheticSwiper(tSec: number): Landmark[] {
+  const pts = syntheticFigure(tSec);
+  if (tSec < 4) return pts;
+  const k = (tSec - 4) % 2.5;
+  // quick sweep (0.35 s), slow way back (1.65 s), a short rest
+  const f = k < 0.35 ? k / 0.35 : k < 2 ? 1 - (k - 0.35) / 1.65 : 0;
+  const x = 0.72 - f * 0.4;
+  pts[LM.leftElbow] = { x: x + 0.06, y: 0.42, visibility: 0.99 };
+  pts[LM.leftWrist] = { x, y: 0.44, visibility: 0.99 };
+  return pts;
 }
 
 /**
